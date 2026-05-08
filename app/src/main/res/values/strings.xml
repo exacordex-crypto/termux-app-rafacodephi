@@ -148,6 +148,8 @@
     <!-- System Audit Preferences -->
     <string name="system_audit_title">System Audit</string>
     <string name="system_audit_summary">Hardware/software compatibility, ISO compliance, and diagnostics</string>
+    <string name="industrial_diagnostics_title">Industrial Diagnostics &amp; Benchmark</string>
+    <string name="industrial_diagnostics_summary">Coherent OS, hardware, bootstrap and deterministic benchmark metrics</string>
 
     <!-- Termux App Preferences -->
     <string name="termux_preferences_title">&TERMUX_APP_NAME;</string>
