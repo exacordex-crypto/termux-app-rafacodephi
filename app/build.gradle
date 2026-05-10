@@ -53,7 +53,6 @@ android {
         buildConfigField "String", "BOOTSTRAP_BLAKE3_ARM", "\"" + project.ext.bootstrapBlake3Arm + "\""
         buildConfigField "String", "BOOTSTRAP_BLAKE3_I686", "\"" + project.ext.bootstrapBlake3I686 + "\""
         buildConfigField "String", "BOOTSTRAP_BLAKE3_X86_64", "\"" + project.ext.bootstrapBlake3X8664 + "\""
-        buildConfigField "boolean", "BOOTSTRAP_BAREMETAL_STRICT", "false"
 
         manifestPlaceholders.TERMUX_PACKAGE_NAME = project.ext.appPackageName
         manifestPlaceholders.TERMUX_APP_NAME = "Termux RAFCODEΦ"
@@ -82,6 +81,19 @@ android {
             reset()
             include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
             universalApk = true
+        }
+    }
+
+    def bootstrapBaremetalStrictEnv = System.getenv("TERMUX_BOOTSTRAP_BAREMETAL_STRICT")
+    def bootstrapBaremetalStrictOverride = null
+    if (bootstrapBaremetalStrictEnv != null && !bootstrapBaremetalStrictEnv.trim().isEmpty()) {
+        def normalized = bootstrapBaremetalStrictEnv.trim().toLowerCase(Locale.ROOT)
+        if (normalized == "true" || normalized == "1" || normalized == "yes" || normalized == "on") {
+            bootstrapBaremetalStrictOverride = true
+        } else if (normalized == "false" || normalized == "0" || normalized == "no" || normalized == "off") {
+            bootstrapBaremetalStrictOverride = false
+        } else {
+            throw new GradleException("Invalid TERMUX_BOOTSTRAP_BAREMETAL_STRICT='${bootstrapBaremetalStrictEnv}'. Use true/false.")
         }
     }
 
@@ -123,12 +135,14 @@ android {
             minifyEnabled true
             shrinkResources = false // Reproducible builds
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            buildConfigField "boolean", "BOOTSTRAP_BAREMETAL_STRICT", (bootstrapBaremetalStrictOverride != null ? bootstrapBaremetalStrictOverride : true).toString()
             if (useReleaseSigning) {
                 signingConfig signingConfigs.release
             }
         }
 
         debug {
+            buildConfigField "boolean", "BOOTSTRAP_BAREMETAL_STRICT", (bootstrapBaremetalStrictOverride != null ? bootstrapBaremetalStrictOverride : false).toString()
         }
     }
 

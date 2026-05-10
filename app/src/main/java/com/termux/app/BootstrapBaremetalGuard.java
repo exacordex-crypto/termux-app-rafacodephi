@@ -30,7 +30,10 @@ final class BootstrapBaremetalGuard {
     private static native int validatePrefixNative(String prefix, ByteBuffer out, int cap);
 
     static void selftest() {
-        if (!LIB_LOADED) return;
+        if (!LIB_LOADED) {
+            handleStrictFailure("selftest", "native library not loaded", null);
+            return;
+        }
         int rc;
         String json;
         synchronized (SHARED_BUFFER) {
@@ -38,21 +41,21 @@ final class BootstrapBaremetalGuard {
             try {
                 rc = selftestNative(SHARED_BUFFER, BUFFER_CAPACITY);
             } catch (UnsatisfiedLinkError e) {
-                Logger.logWarn(LOG_TAG, "selftestNative missing JNI symbol: " + e.getMessage());
+                handleStrictFailure("selftest", "missing JNI symbol for selftestNative", e);
                 return;
             }
             json = readBufferString();
         }
         if (rc < 0) {
-            Logger.logWarn(LOG_TAG, "selftest failed rc=" + rc + " payload=" + json);
-        } else {
-            Logger.logInfo(LOG_TAG, "selftest ok payload=" + json);
+            handleStrictFailure("selftest", "critical native return rc=" + rc + " payload=" + json, null);
+            return;
         }
+        Logger.logInfo(LOG_TAG, "bootstrap-guard phase=selftest status=ok payload=" + json);
     }
 
     static void validateAfterBootstrap(String prefix) {
         if (!LIB_LOADED) {
-            Logger.logWarn(LOG_TAG, "Skipped guard validation: native lib not loaded");
+            handleStrictFailure("validatePrefix", "native library not loaded", null);
             return;
         }
         int rc;
@@ -62,20 +65,27 @@ final class BootstrapBaremetalGuard {
             try {
                 rc = validatePrefixNative(prefix, SHARED_BUFFER, BUFFER_CAPACITY);
             } catch (UnsatisfiedLinkError e) {
-                Logger.logWarn(LOG_TAG, "validatePrefixNative missing JNI symbol: " + e.getMessage());
+                handleStrictFailure("validatePrefix", "missing JNI symbol for validatePrefixNative", e);
                 return;
             }
             json = readBufferString();
         }
         if (rc < 0) {
-            String msg = "Guard validation failed rc=" + rc + " payload=" + json;
-            if (BuildConfig.BOOTSTRAP_BAREMETAL_STRICT) {
-                throw new RuntimeException(msg);
-            }
-            Logger.logWarn(LOG_TAG, msg + " (non-blocking beta)");
+            handleStrictFailure("validatePrefix", "critical native return rc=" + rc + " payload=" + json, null);
             return;
         }
-        Logger.logInfo(LOG_TAG, "Guard validation OK payload=" + json);
+        Logger.logInfo(LOG_TAG, "bootstrap-guard phase=validatePrefix status=ok payload=" + json);
+    }
+
+    private static void handleStrictFailure(String phase, String cause, Throwable error) {
+        String message = "bootstrap-guard phase=" + phase + " status=failed cause=" + cause;
+        if (error != null && error.getMessage() != null && !error.getMessage().isEmpty()) {
+            message += " detail=" + error.getMessage();
+        }
+        if (BuildConfig.BOOTSTRAP_BAREMETAL_STRICT) {
+            throw new RuntimeException(message, error);
+        }
+        Logger.logWarn(LOG_TAG, message + " strict=false");
     }
 
     private static void clearBuffer() {

@@ -11,6 +11,7 @@ import android.system.StructStat;
 import android.util.Pair;
 import android.view.WindowManager;
 
+import com.termux.rafacodephi.BuildConfig;
 import com.termux.rafacodephi.R;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.termux.crash.TermuxCrashUtils;
@@ -271,8 +272,12 @@ final class TermuxInstaller {
 
                     activity.runOnUiThread(whenDone);
 
-                } catch (final Exception e) {
-                    showBootstrapErrorDialog(activity, whenDone, Logger.getStackTracesMarkdownString(null, Logger.getStackTracesStringArray(e)));
+                } catch (final Throwable t) {
+                    if (BuildConfig.BOOTSTRAP_BAREMETAL_STRICT) {
+                        Logger.logError(LOG_TAG, "Bootstrap installation failed in strict mode; propagating exception.", t);
+                        throw t;
+                    }
+                    showBootstrapErrorDialog(activity, whenDone, Logger.getStackTracesMarkdownString(null, Logger.getStackTracesStringArray(t)));
 
                 } finally {
                     activity.runOnUiThread(() -> {
