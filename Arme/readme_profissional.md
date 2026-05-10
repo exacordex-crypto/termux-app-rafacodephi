@@ -71,3 +71,19 @@ A etapa só fecha quando houver evidência verificável de:
 - upload de artefatos configurado;
 - documentação mínima alinhada;
 - diff claro e rastreável no histórico Git.
+
+
+## Normalizacao de nomes aplicada
+- `Compilador ASM.sh` -> `compilador_asm_legacy.sh`
+- `README_PROFISSIONAL.md` -> `readme_profissional.md`
+- `DOCUMENTACAO_TECNICA_ALGORITMOS.md` -> `documentacao_tecnica_algoritmos.md`
+- `4.md` -> `estado_nucleo.md`
+- `5.md` -> `estado_aprendizado_fronteira.md`
+- `7.md` -> `estado_modelo_temporal.md`
+- `Conceito.txt` -> `conceitos_mvp.txt`
+- `Pomeg.txt` -> `pomeg.txt`
+- `RAFAELIA_MASTER.txt` -> `rafaelia_master.txt`
+- `RAFAELIA_BARE_HARDWARE (2).txt` -> `rafaelia_bare_hardware_v2.txt`
+- `RAFAELIA_SEMENTES (1) (1).txt` -> `rafaelia_sementes_v1.txt`
+- Novo orquestrador com heredoc: `compilador_asm_refatorado.sh`
+- Documento de união lógica: `engenharia_estado_unificado.md`
