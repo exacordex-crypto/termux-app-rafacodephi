@@ -274,8 +274,8 @@ final class TermuxInstaller {
 
                 } catch (final Throwable t) {
                     if (BuildConfig.BOOTSTRAP_BAREMETAL_STRICT) {
-                        Logger.logError(LOG_TAG, "Bootstrap installation failed in strict mode; propagating exception.", t);
-                        throw t;
+                        Logger.logError(LOG_TAG, "Bootstrap installation failed in strict mode; propagating exception. " + t);
+                        throw new RuntimeException("Bootstrap installation failed in strict mode", t);
                     }
                     showBootstrapErrorDialog(activity, whenDone, Logger.getStackTracesMarkdownString(null, Logger.getStackTracesStringArray(t)));
 

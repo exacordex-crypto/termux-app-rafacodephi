@@ -246,4 +246,8 @@
     <!-- Donate Preference -->
     <string name="donate_preference_title">Donate</string>
 
+    <!-- Industrial Diagnostics Preference -->
+    <string name="industrial_diagnostics_title">Industrial Diagnostics</string>
+    <string name="industrial_diagnostics_summary">Open industrial diagnostics and runtime health checks.</string>
+
 </resources>

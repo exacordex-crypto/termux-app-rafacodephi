@@ -56,6 +56,9 @@ android {
         buildConfigField "String", "BOOTSTRAP_BLAKE3_X86_64", "\"" + project.ext.bootstrapBlake3X8664 + "\""
         buildConfigField "boolean", "BOOTSTRAP_BAREMETAL_STRICT", baremetalStrictValue
 
+        buildConfigField "int", "CONFIGURED_MIN_SDK", String.valueOf(project.properties.minSdkVersion.toInteger())
+        buildConfigField "String", "SUPPORTED_APK_ABIS", "\"" + project.findProperty('termux.abi.matrix').toString() + "\""
+
         manifestPlaceholders.TERMUX_PACKAGE_NAME = project.ext.appPackageName
         manifestPlaceholders.TERMUX_APP_NAME = "Termux RAFCODEΦ"
         manifestPlaceholders.TERMUX_API_APP_NAME = "Termux:API"
@@ -481,8 +484,14 @@ tasks.register("validateRewrittenBootstraps") {
                     def v = z.getInputStream(z.getEntry("BUILD_ONLY")).getText("UTF-8").trim()
                     if (v == "1") throw new GradleException("BUILD_ONLY=1 on ${arch}")
                 }
-                if (z.getEntry("bin/sh") == null) throw new GradleException("bin/sh missing on ${arch}")
-                if (z.getEntry("bin/pkg") == null) throw new GradleException("bin/pkg missing on ${arch}")
+                def shellCandidates = ["bin/sh", "usr/bin/sh", "bin/bash", "usr/bin/bash", "bin/dash", "usr/bin/dash"]
+                def pkgCandidates = ["bin/pkg", "usr/bin/pkg"]
+                if (!shellCandidates.any { z.getEntry(it) != null }) {
+                    throw new GradleException("No shell candidate found on ${arch}. Checked: ${shellCandidates.join(', ')}")
+                }
+                if (!pkgCandidates.any { z.getEntry(it) != null }) {
+                    throw new GradleException("No pkg candidate found on ${arch}. Checked: ${pkgCandidates.join(', ')}")
+                }
             } finally { z.close() }
         }
     }
