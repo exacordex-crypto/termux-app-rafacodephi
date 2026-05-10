@@ -160,6 +160,15 @@ Release signing oficial é opcional e controlado por:
 - `TERMUX_RELEASE_KEY_ALIAS`
 - `TERMUX_RELEASE_KEY_PASSWORD`
 
+### Contrato de trilhas de release (CI)
+
+| Trilha | Assinatura release (`armeabi-v7a`, `arm64-v8a`) | Unsigned permitido | Bloqueios |
+|---|---|---|---|
+| oficial | Obrigatória em `dist/apk-matrix/signed` | Não | Falha se faltar APK assinado por ABI, se houver release unsigned, se hash/nome divergirem de `SHA256SUMS.txt`, ou se `BOOTSTRAP_BAREMETAL_STRICT!=true`. |
+| interna | Obrigatória em `dist/apk-matrix/signed` | Sim, apenas para validação explícita em `dist/apk-matrix/unsigned` | Falha se nomes de signed/unsigned violarem contrato ou se hashes não baterem com `SHA256SUMS.txt`. |
+
+Validação única de contrato executada por `./gradlew verifyReleaseContract` antes de qualquer upload de artefato no workflow `apk_matrix_build.yml`.
+
 O módulo nativo mantém dispatch runtime com fallback C seguro para ARM32/ARM64 quando NEON ASM não estiver disponível em runtime.
 
 ### Requisitos mínimos para scripts de sincronização/export

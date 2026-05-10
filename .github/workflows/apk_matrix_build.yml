@@ -63,6 +63,13 @@ on:
         description: Use OFFICIAL_* signing secrets (fallbacks to local validation key if unavailable)
         type: boolean
         default: false
+      release_track:
+        description: Artifact track (official enforces signed-only release ABIs)
+        type: choice
+        options:
+          - official
+          - internal
+        default: official
 
 jobs:
   build-apk-matrix:
@@ -103,6 +110,12 @@ jobs:
           STORE_PASS: ${{ env.OFFICIAL_KEYSTORE_READY == '1' && secrets.OFFICIAL_RELEASE_STORE_PASSWORD || '' }}
           KEY_PASS: ${{ env.OFFICIAL_KEYSTORE_READY == '1' && secrets.OFFICIAL_RELEASE_KEY_PASSWORD || '' }}
         run: ./scripts/build_apk_matrix.sh
+
+      - name: verifyReleaseContract
+        env:
+          RELEASE_TRACK: ${{ inputs.release_track }}
+          BOOTSTRAP_BAREMETAL_STRICT: ${{ env.TERMUX_BOOTSTRAP_BAREMETAL_STRICT || 'true' }}
+        run: ./gradlew verifyReleaseContract --no-daemon
 
       - name: Publish APK size report in workflow summary
         run: |

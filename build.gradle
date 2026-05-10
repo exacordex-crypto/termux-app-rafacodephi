@@ -15,3 +15,10 @@ allprojects {
         maven { url = "https://jitpack.io" }
     }
 }
+
+tasks.register("verifyReleaseContract", Exec) {
+    group = "verification"
+    description = "Validates release APK contract for official/internal CI tracks."
+    workingDir rootProject.projectDir
+    commandLine "bash", "scripts/verify_release_contract.sh"
+}

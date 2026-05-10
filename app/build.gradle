@@ -96,6 +96,9 @@ android {
             throw new GradleException("Invalid TERMUX_BOOTSTRAP_BAREMETAL_STRICT='${bootstrapBaremetalStrictEnv}'. Use true/false.")
         }
     }
+    if (hasReleaseTaskRequested() && bootstrapBaremetalStrictOverride == false) {
+        throw new GradleException("Release tasks require TERMUX_BOOTSTRAP_BAREMETAL_STRICT=true. Disable is only allowed for debug/internal tracks.")
+    }
 
     def releaseSigningEnabled = (System.getenv("TERMUX_ENABLE_RELEASE_SIGNING") ?: "false").toBoolean()
     def releaseKeystoreFilePath = System.getenv("TERMUX_RELEASE_KEYSTORE_FILE") ?: ""
