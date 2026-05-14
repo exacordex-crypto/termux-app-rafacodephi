@@ -3,7 +3,7 @@ CFLAGS_BASE ?= -O2 -fno-strict-aliasing -Wall -Wextra -Werror=implicit-function-
 ARCH ?= host
 EXTRA_CFLAGS ?=
 
-.PHONY: all clean diagnose selftest
+.PHONY: all clean diagnose selftest extract-abi-bootstrap
 
 all: diagnose
 
@@ -18,3 +18,6 @@ clean:
 	rm -rf build
 	rm -f bootstrap_rafaelia/selftest.log
 	@echo "Cleaned top-level build artifacts."
+
+extract-abi-bootstrap:
+	python3 tools/bootstrap/extract_abi_bootstrap.py

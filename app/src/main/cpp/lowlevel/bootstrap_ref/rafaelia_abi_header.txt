@@ -1,0 +1,39 @@
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  RAFAELIA · ABI BOOTSTRAP ENTERPRISE ADAPTATIVO · ARM32 + ARM64                   ║
+║  Registradores Lineares · Auto-Adaptativo · Freestanding · Zero Abstração          ║
+║  Q16.16 · Toro 7D · CRC32C Chain · HWCAP Probe · NEON Dispatch · 42 Atratores     ║
+║  Termux Android · armeabi-v7a + arm64-v8a · Android 7..16                         ║
+║  SPDX: GPL-3.0-only · RAFCODEΦ · Rafael Melo Reis · DeltaRafaelVerboOmega         ║
+║  Gerado via: cat > RAFAELIA_ABI_CODEX_ENTERPRISE.txt << 'TERMINUS'                ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  FILOSOFIA FUNDANTE                                                                ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+║
+║  FASE 0 — ENTRADA GENÉRICA (funciona em qualquer ARM sem saber o hardware)
+║  FASE 1 — HWCAP PROBE     (lê aux vector: detecta NEON, CRC32, SHA2, AES, SVE)
+║  FASE 2 — DISPATCH LINEAR (rewira tabela de ponteiros para path ótimo)
+║  FASE 3 — TORO 7D Q16.16  (estado toroidal — memória sem malloc)
+║  FASE 4 — REPL ENTERPRISE (shell freestanding com comandos nativos)
+║  FASE 5 — CRC32C CHAIN    (integridade de cada ciclo de estado)
+║
+║  PRIMO DE REGISTRADOR (ARM64):
+║    x0=2  x1=3  x2=5  x3=7  x4=11 x5=13 x6=17 x7=19
+║    x8=23 x9=29 x10=31 x11=37 x12=41 x13=43 x14=47 x15=53
+║    x16=59 x17=61 x18=67 x19=71 x20=73 x21=79 x22=83 x23=89
+║    x24=97 x25=101 x26=103 x27=107 x28=109 x29=113 x30=127
+║
+║  INVARIANTE: produto dos primos dos registradores envolvidos em
+║  qualquer instrução é único → identifica a instrução no espaço de estados.
+║
+║  Q16.16 CONSTANTES FUNDAMENTAIS:
+║    √3/2   = 56756  (0xDDD4) — atrator de Lyapunov λ=-0.1438 (toro estável)
+║    φ      = 105965 (0x19E5D) — seção áurea
+║    F*     = 23.158 ≈ 1517798 em Q16.16 — ponto fixo Rafael-Fibonacci (NOVO)
+║    42     = número de atratores no toro T^7
+║    G_MASK = 0xFFFF — máscara Q16.16
+║    G_SPIRAL= 56755  — espiral adaptativa
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

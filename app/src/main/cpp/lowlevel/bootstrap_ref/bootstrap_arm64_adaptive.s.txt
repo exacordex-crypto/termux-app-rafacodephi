@@ -1,0 +1,1410 @@
+SEÇÃO A — ARM64 arm64-v8a · BOOTSTRAP ADAPTATIVO COMPLETO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+; ╔══════════════════════════════════════════════════════════════════════════╗
+; ║  bootstrap_arm64_adaptive.s                                            ║
+; ║  Compilar: as -o rafa64.o bootstrap_arm64_adaptive.s                   ║
+; ║            ld -o rafa64 rafa64.o                                       ║
+; ║  Termux:   pkg install binutils && as ... && ld ...                    ║
+; ║  Verificar 16KB: readelf -l rafa64 | grep Align                        ║
+; ╚══════════════════════════════════════════════════════════════════════════╝
+
+.arch   armv8-a
+.syntax unified
+
+; ── SYSCALLS ARM64 (AArch64 Linux) ───────────────────────────────────────────
+; Número em x8, svc #0, retorno em x0
+; Primos mnemônicos: lembre — read=63, write=64, exit=93, execve=221
+.equ SYS_io_setup,    0
+.equ SYS_read,       63
+.equ SYS_write,      64
+.equ SYS_openat,     56
+.equ SYS_close,      57
+.equ SYS_lseek,      62
+.equ SYS_mmap,      222
+.equ SYS_mprotect,  226
+.equ SYS_munmap,    215
+.equ SYS_fork,       57   ; legado — prefer clone
+.equ SYS_clone,     220   ; bionic usa este
+.equ SYS_execve,    221
+.equ SYS_exit,       93
+.equ SYS_wait4,     260
+.equ SYS_getpid,    172
+.equ SYS_getuid,    174
+.equ SYS_gettid,    178
+.equ SYS_prctl,     167   ; AT_HWCAP via prctl alternativo
+.equ SYS_getrandom, 278
+.equ STDIN,           0
+.equ STDOUT,          1
+.equ STDERR,          2
+
+; ── HWCAP BITS (Linux ARM64 — lidos do aux vector) ───────────────────────────
+; AT_HWCAP = 16 no aux vector
+; AT_HWCAP2= 26 no aux vector
+.equ AT_HWCAP,       16
+.equ AT_HWCAP2,      26
+.equ AT_NULL,         0
+
+; HWCAP bits ARM64:
+.equ HWCAP_FP,       (1<<0)    ; FPU
+.equ HWCAP_ASIMD,    (1<<1)    ; Advanced SIMD (NEON) — sempre 1 em AArch64
+.equ HWCAP_EVTSTRM,  (1<<2)
+.equ HWCAP_AES,      (1<<3)    ; AES acelerado por HW
+.equ HWCAP_PMULL,    (1<<4)    ; PMULL (GCM)
+.equ HWCAP_SHA1,     (1<<5)
+.equ HWCAP_SHA2,     (1<<6)    ; SHA-256 por HW
+.equ HWCAP_CRC32,    (1<<7)    ; CRC32/CRC32C por HW
+.equ HWCAP_ATOMICS,  (1<<8)    ; LSE atomic ops
+.equ HWCAP_FPHP,     (1<<9)    ; FP16
+.equ HWCAP_ASIMDHP,  (1<<10)   ; NEON FP16
+.equ HWCAP_SVE,      (1<<22)   ; Scalable Vector Extension
+.equ HWCAP_DCPOP,    (1<<16)   ; DC CVAP (persistent memory)
+
+; ── MMAP FLAGS ───────────────────────────────────────────────────────────────
+.equ PROT_NONE,       0
+.equ PROT_READ,       1
+.equ PROT_WRITE,      2
+.equ PROT_EXEC,       4
+.equ PROT_RW,         3
+.equ MAP_SHARED,      1
+.equ MAP_PRIVATE,     2
+.equ MAP_ANONYMOUS, 0x20
+.equ MAP_ANON_PRIV, 0x22   ; MAP_PRIVATE|MAP_ANONYMOUS
+
+; ── PAGE SIZE (CRÍTICO Android 15/16) ────────────────────────────────────────
+.equ PAGE_4K,    0x1000
+.equ PAGE_16K,   0x4000
+.equ ALIGN_16K,  14        ; .align 14 = 2^14 = 16384
+
+; ── Q16.16 CONSTANTES ────────────────────────────────────────────────────────
+.equ Q_ONE,      65536     ; 1.0 em Q16.16
+.equ Q_HALF,     32768     ; 0.5
+.equ Q_SQRT3_2,  56756     ; √3/2 = 0.8660...
+.equ Q_PHI_GOLD, 105965    ; φ = 1.6180...
+.equ Q_ALPHA,    16384     ; 0.25 (EMA α)
+.equ Q_IALPHA,   49152     ; 0.75 (EMA 1-α)
+.equ Q_SPIRAL,   56755     ; espiral Rafael
+.equ G_PERIOD,   42        ; período toroidal
+.equ G_DIM,      7         ; dimensões do toro T^7
+.equ G_ARENA_SZ, 0x10000   ; 64KB arena (múltiplo de 16KB)
+
+; ── CLONE FLAGS (para fork Android seguro) ───────────────────────────────────
+.equ SIGCHLD,    17
+.equ CLONE_VM,   0x100
+.equ CLONE_FS,   0x200
+.equ CLONE_SIGCHLD, 17     ; clone como fork: flags=SIGCHLD
+
+; ══════════════════════════════════════════════════════════════════════════════
+.section .data
+.align 4
+
+; ── DISPATCH TABLE ARM64 ─────────────────────────────────────────────────────
+; Ponteiros para funções — inicialmente apontam para versão genérica.
+; Após HWCAP probe, são reescritos para versão ótima.
+; PRIMO TOTAL DA TABELA = 2×3×5×7×11×13 = 30030 (identificador único)
+dispatch_memcpy:  .quad generic_memcpy64       ; p=2
+dispatch_memset:  .quad generic_memset64       ; p=3
+dispatch_crc32:   .quad generic_crc32c_64      ; p=5
+dispatch_ema:     .quad generic_ema_q16        ; p=7
+dispatch_toro:    .quad generic_toro_step      ; p=11
+dispatch_entropy: .quad generic_entropy        ; p=13
+
+; ── HWCAP RESULTS (preenchido em runtime) ────────────────────────────────────
+.align 8
+g_hwcap:        .quad 0     ; AT_HWCAP lido do aux vector
+g_hwcap2:       .quad 0     ; AT_HWCAP2
+g_has_neon:     .byte 0     ; 1 se ASIMD disponível
+g_has_crc32hw:  .byte 0     ; 1 se CRC32 HW
+g_has_aes_hw:   .byte 0     ; 1 se AES HW
+g_has_sha2:     .byte 0     ; 1 se SHA2 HW
+g_has_atomics:  .byte 0     ; 1 se LSE atomics
+g_has_sve:      .byte 0     ; 1 se SVE
+.align 4
+
+; ── BANNERS ──────────────────────────────────────────────────────────────────
+banner_arm64:
+  .ascii "\033[1;32m"
+  .ascii "╔══════════════════════════════════════════════════════╗\r\n"
+  .ascii "║  RAFAELIA · ARM64 Adaptive Bootstrap · Enterprise   ║\r\n"
+  .ascii "║  Toro T^7 · Q16.16 · HWCAP · CRC32C · 42 Atratores ║\r\n"
+  .ascii "╚══════════════════════════════════════════════════════╝\r\n"
+  .ascii "\033[0m"
+.equ banner_arm64_len, . - banner_arm64
+
+banner_caps:
+  .ascii "\033[36m[HWCAP]\033[0m "
+.equ banner_caps_len, . - banner_caps
+
+str_neon:    .ascii "NEON " ; 5
+str_crc32:   .ascii "CRC32 "
+str_aes:     .ascii "AES "
+str_sha2:    .ascii "SHA2 "
+str_atomics: .ascii "LSE "
+str_sve:     .ascii "SVE "
+str_generic: .ascii "GENERIC\r\n"
+.equ str_generic_len, . - str_generic
+str_nl:      .ascii "\r\n"
+str_prompt:  .ascii "\033[1;36mrafaφ64\033[0m\033[1;37m❯\033[0m "
+.equ str_prompt_len, . - str_prompt
+str_ok:      .ascii "\033[32m[OK]\033[0m "
+str_err:     .ascii "\033[31m[ERRO]\033[0m "
+str_toro:    .ascii "[TORO] Estado 7D inicializado Q16.16\r\n"
+.equ str_toro_len, . - str_toro
+str_dispatch:
+  .ascii "[DISPATCH] Tabela reconfigurada para hardware detectado\r\n"
+.equ str_dispatch_len, . - str_dispatch
+str_arena:   .ascii "[ARENA] 64KB BSS sem malloc\r\n"
+.equ str_arena_len, . - str_arena
+str_exit_msg:.ascii "\r\n[RAFAELIA] Saindo. CRC chain: "
+.equ str_exit_msg_len, . - str_exit_msg
+str_bye:     .ascii "\r\n"
+
+; Caminhos de shell para Android/Termux
+path_sh_termux: .asciz "/data/data/com.termux/files/usr/bin/sh"
+path_sh_system: .asciz "/system/bin/sh"
+path_sh_bin:    .asciz "/bin/sh"
+arg0_sh:        .asciz "sh"
+arg1_c:         .asciz "-c"
+
+; Nomes de comandos built-in
+cmd_exit:    .ascii "exit"
+cmd_status:  .ascii "status"
+cmd_toro:    .ascii "toro"
+cmd_crc:     .ascii "crc"
+cmd_caps:    .ascii "caps"
+cmd_help:    .ascii "help"
+
+msg_help:
+  .ascii "Comandos: exit status toro crc caps help\r\n"
+.equ msg_help_len, . - msg_help
+
+; ── CRC32C SOFTWARE TABLE (256 × 4 bytes) ────────────────────────────────────
+; Polinômio Castagnoli 0x82F63B78
+; Preenchido por init_crc_table em runtime
+.align 4
+crc_table: .space 1024      ; 256 × uint32
+
+.section .bss
+; CRÍTICO: .align 14 = 16KB para Android 15/16
+.align ALIGN_16K
+
+; ── ARENA BSS 64KB (zero malloc) ─────────────────────────────────────────────
+; Primeiro campo após alinhamento 16KB
+; PRIMO=2 (fundação — tudo começa aqui)
+arena_mem:   .space G_ARENA_SZ
+arena_bump:  .space 8       ; ponteiro bump current
+
+; ── TOROIDAL STATE 7D Q16.16 ─────────────────────────────────────────────────
+; Mapeamento de primos:
+;   s[0]=p2, s[1]=p3, s[2]=p5, s[3]=p7, s[4]=p11, s[5]=p13, s[6]=p17
+; INVARIANTE: produto s[0]×s[1]×...×s[6] módulo G_PERIOD define o atrator
+toro_s:       .space 28     ; uint32[7] — estado toroidal
+toro_C:       .space 4      ; coerência Q16.16
+toro_H:       .space 4      ; entropia Q16.16
+toro_phi:     .space 4      ; (1-H)*C Q16.16 — saída do toro
+toro_phase:   .space 4      ; 0..41 (42 atratores)
+toro_crc:     .space 4      ; CRC32C do estado (integridade)
+toro_chain:   .space 4      ; CRC chain temporal acumulado
+toro_step:    .space 8      ; contador de passos (uint64)
+
+; ── BUFFERS DE I/O ───────────────────────────────────────────────────────────
+.align 4
+io_buf:     .space 2048     ; buffer de leitura/escrita
+io_out:     .space 512      ; buffer de saída formatada
+
+; ── STATUS DE PROCESSO ───────────────────────────────────────────────────────
+.align 4
+proc_status: .space 8
+saved_envp:  .space 8
+saved_sp:    .space 8
+
+; ── HEX OUTPUT BUFFER ────────────────────────────────────────────────────────
+hex_buf:    .space 32
+
+.section .text
+.global _start
+.global hwcap_probe_arm64
+.global dispatch_rewire_arm64
+.global toro_init
+.global toro_step_arm64
+.global neon_memcpy128
+.global neon_memset128
+.global hw_crc32c_block
+.global generic_crc32c_64
+.global generic_ema_q16
+.global ema_neon_7d
+.global arena_alloc
+.global print_hex32
+.global rafaclone
+
+; ══════════════════════════════════════════════════════════════════════════════
+; _start — FASE 0: ENTRADA GENÉRICA
+; Stack AArch64: sp→argc, sp+8→argv[], sp+8*(argc+2)→envp[]
+; PRIMO=2 (fundação)
+; CALLEE-SAVED usados: x19..x28 (primos 71..109)
+; ══════════════════════════════════════════════════════════════════════════════
+.align 4
+_start:
+    ; ── Snapshot do contexto inicial (commit gate fase 0) ────────────────
+    adr  x19, saved_sp          ; x19=71 (primo)
+    mov  x0, sp
+    str  x0, [x19]              ; salva SP original
+
+    ; Extrai envp do stack: &envp = &argv[argc+1]
+    ldr  x0, [sp]               ; argc
+    add  x0, x0, #2
+    lsl  x0, x0, #3             ; *(argc+2)*8
+    add  x0, sp, x0             ; &envp[0]
+    adr  x1, saved_envp
+    str  x0, [x1]
+
+    ; ── FASE 1: HWCAP PROBE ──────────────────────────────────────────────
+    ; Lê aux vector da stack (após envp[] NULL)
+    bl   hwcap_probe_arm64
+
+    ; ── FASE 2: DISPATCH REWIRE ──────────────────────────────────────────
+    bl   dispatch_rewire_arm64
+
+    ; ── Inicializa CRC table (software fallback) ─────────────────────────
+    bl   init_crc_table_arm64
+
+    ; ── Inicializa arena BSS ──────────────────────────────────────────────
+    adr  x0, arena_mem
+    adr  x1, arena_bump
+    str  x0, [x1]               ; bump = início da arena
+
+    ; ── FASE 3: TORO 7D Q16.16 ───────────────────────────────────────────
+    bl   toro_init
+
+    ; ── Banner ────────────────────────────────────────────────────────────
+    mov  x0, #STDOUT
+    adr  x1, banner_arm64
+    mov  x2, #banner_arm64_len
+    mov  x8, #SYS_write
+    svc  #0
+
+    ; Mostra capacidades detectadas
+    bl   print_caps_arm64
+
+    ; ── FASE 4: REPL ENTERPRISE ──────────────────────────────────────────
+    bl   repl_arm64
+
+    ; ── Exit com CRC chain final ──────────────────────────────────────────
+    adr  x0, toro_chain
+    ldr  w20, [x0]              ; x20=73 = CRC chain final
+    bl   print_exit_crc
+
+    mov  x0, #0
+    mov  x8, #SYS_exit
+    svc  #0
+
+; ══════════════════════════════════════════════════════════════════════════════
+; hwcap_probe_arm64 — FASE 1: LÊ AT_HWCAP DO AUX VECTOR
+; O aux vector está após envp[] no stack. Percorre até AT_NULL.
+; Armazena em g_hwcap, g_hwcap2, g_has_*
+; PRIMO=3 (conector hardware↔software)
+; ══════════════════════════════════════════════════════════════════════════════
+.align 4
+hwcap_probe_arm64:
+    stp  x29, x30, [sp, #-32]!
+    mov  x29, sp
+
+    ; Navega aux vector: após envp[]=NULL
+    adr  x20, saved_envp
+    ldr  x20, [x20]             ; x20 = &envp[0]
+
+    ; Pula envp[] até encontrar NULL
+.hwcap_skip_envp:
+    ldr  x1, [x20], #8
+    cbnz x1, .hwcap_skip_envp
+    ; x20 aponta para aux[0].type agora
+
+    ; Percorre pares (type, value) até AT_NULL=0
+.hwcap_scan_aux:
+    ldp  x21, x22, [x20], #16  ; x21=type, x22=value
+    cbz  x21, .hwcap_done       ; AT_NULL
+
+    cmp  x21, #AT_HWCAP
+    b.ne .hwcap_check2
+    adr  x0, g_hwcap
+    str  x22, [x0]
+    b    .hwcap_scan_aux
+
+.hwcap_check2:
+    cmp  x21, #AT_HWCAP2
+    b.ne .hwcap_scan_aux
+    adr  x0, g_hwcap2
+    str  x22, [x0]
+    b    .hwcap_scan_aux
+
+.hwcap_done:
+    ; Decodifica bits HWCAP em flags binárias
+    adr  x0, g_hwcap
+    ldr  x23, [x0]
+
+    ; NEON/ASIMD: bit 1 (sempre 1 em AArch64, mas verificamos)
+    tst  x23, #HWCAP_ASIMD
+    cset w1, ne
+    adr  x0, g_has_neon
+    strb w1, [x0]
+
+    ; CRC32 HW: bit 7
+    tst  x23, #HWCAP_CRC32
+    cset w1, ne
+    adr  x0, g_has_crc32hw
+    strb w1, [x0]
+
+    ; AES HW: bit 3
+    tst  x23, #HWCAP_AES
+    cset w1, ne
+    adr  x0, g_has_aes_hw
+    strb w1, [x0]
+
+    ; SHA2 HW: bit 6
+    tst  x23, #HWCAP_SHA2
+    cset w1, ne
+    adr  x0, g_has_sha2
+    strb w1, [x0]
+
+    ; LSE Atomics: bit 8
+    tst  x23, #HWCAP_ATOMICS
+    cset w1, ne
+    adr  x0, g_has_atomics
+    strb w1, [x0]
+
+    ; SVE: bit 22
+    tst  x23, #HWCAP_SVE
+    cset w1, ne
+    adr  x0, g_has_sve
+    strb w1, [x0]
+
+    ldp  x29, x30, [sp], #32
+    ret
+
+; ══════════════════════════════════════════════════════════════════════════════
+; dispatch_rewire_arm64 — FASE 2: REESCREVE TABELA DE DISPATCH
+; Substitui ponteiros genéricos por implementações ótimas detectadas.
+; PRIMO=5 (bridge hardware↔runtime)
+; ══════════════════════════════════════════════════════════════════════════════
+.align 4
+dispatch_rewire_arm64:
+    stp  x29, x30, [sp, #-16]!
+    mov  x29, sp
+
+    ; Verifica NEON → rewire memcpy e memset
+    adr  x0, g_has_neon
+    ldrb w0, [x0]
+    cbz  w0, .dispatch_crc_check
+
+    adr  x1, dispatch_memcpy
+    adr  x0, neon_memcpy128
+    str  x0, [x1]               ; dispatch_memcpy → neon_memcpy128
+
+    adr  x1, dispatch_memset
+    adr  x0, neon_memset128
+    str  x0, [x1]               ; dispatch_memset → neon_memset128
+
+    adr  x1, dispatch_ema
+    adr  x0, ema_neon_7d
+    str  x0, [x1]               ; dispatch_ema → ema_neon_7d
+
+    adr  x1, dispatch_toro
+    adr  x0, toro_step_neon
+    str  x0, [x1]               ; dispatch_toro → toro_step_neon
+
+.dispatch_crc_check:
+    ; Verifica CRC32 HW → rewire crc32
+    adr  x0, g_has_crc32hw
+    ldrb w0, [x0]
+    cbz  w0, .dispatch_done
+
+    adr  x1, dispatch_crc32
+    adr  x0, hw_crc32c_block
+    str  x0, [x1]               ; dispatch_crc32 → hw_crc32c_block
+
+.dispatch_done:
+    ; Anuncia rewire completo
+    mov  x0, #STDOUT
+    adr  x1, str_dispatch
+    mov  x2, #str_dispatch_len
+    mov  x8, #SYS_write
+    svc  #0
+
+    ldp  x29, x30, [sp], #16
+    ret
+
+; ══════════════════════════════════════════════════════════════════════════════
+; toro_init — FASE 3: INICIALIZA TORO T^7 Q16.16
+; s[d] = (G_SPIRAL * d * prime[d]) & 0xFFFF para cada dimensão
+; Garante: cada dimensão inicia em estado diferente (sem degeneração)
+; PRIMO=11 (orquestrador de estados)
+; ══════════════════════════════════════════════════════════════════════════════
+.align 4
+toro_init:
+    stp  x29, x30, [sp, #-32]!
+    mov  x29, sp
+
+    ; Primos das dimensões: 2,3,5,7,11,13,17
+    adr  x19, toro_s
+    mov  w20, #Q_SPIRAL         ; semente inicial
+
+    ; d=0: s[0] = (56755 * 2) & 0xFFFF = 47974
+    mov  w21, #2
+    mul  w22, w20, w21
+    and  w22, w22, #0xFFFF
+    str  w22, [x19, #0]
+
+    ; d=1: s[1] = (56755 * 3) & 0xFFFF
+    mov  w21, #3
+    mul  w22, w20, w21
+    and  w22, w22, #0xFFFF
+    str  w22, [x19, #4]
+
+    ; d=2: s[2] = (56755 * 5) & 0xFFFF
+    mov  w21, #5
+    mul  w22, w20, w21
+    and  w22, w22, #0xFFFF
+    str  w22, [x19, #8]
+
+    ; d=3: s[3] = (56755 * 7) & 0xFFFF
+    mov  w21, #7
+    mul  w22, w20, w21
+    and  w22, w22, #0xFFFF
+    str  w22, [x19, #12]
+
+    ; d=4: s[4] = (56755 * 11) & 0xFFFF
+    mov  w21, #11
+    mul  w22, w20, w21
+    and  w22, w22, #0xFFFF
+    str  w22, [x19, #16]
+
+    ; d=5: s[5] = (56755 * 13) & 0xFFFF
+    mov  w21, #13
+    mul  w22, w20, w21
+    and  w22, w22, #0xFFFF
+    str  w22, [x19, #20]
+
+    ; d=6: s[6] = (56755 * 17) & 0xFFFF
+    mov  w21, #17
+    mul  w22, w20, w21
+    and  w22, w22, #0xFFFF
+    str  w22, [x19, #24]
+
+    ; C = H = 0x8000 (0.5 — estado neutro)
+    mov  w0, #0x8000
+    adr  x1, toro_C
+    str  w0, [x1]
+    adr  x1, toro_H
+    str  w0, [x1]
+
+    ; phi = 0x8000
+    adr  x1, toro_phi
+    str  w0, [x1]
+
+    ; phase = 0, chain = 0, step = 0
+    adr  x1, toro_phase
+    str  wzr, [x1]
+    adr  x1, toro_chain
+    str  wzr, [x1]
+    adr  x1, toro_step
+    str  xzr, [x1]
+
+    ; CRC32C do estado inicial → toro_crc
+    adr  x0, toro_s
+    mov  x1, #28               ; 7 × 4 bytes
+    bl   generic_crc32c_64
+    adr  x1, toro_crc
+    str  w0, [x1]
+
+    ; Anuncia init
+    mov  x0, #STDOUT
+    adr  x1, str_toro
+    mov  x2, #str_toro_len
+    mov  x8, #SYS_write
+    svc  #0
+
+    ldp  x29, x30, [sp], #32
+    ret
+
+; ══════════════════════════════════════════════════════════════════════════════
+; toro_step_neon — Um passo do toro T^7 com NEON Advanced SIMD
+; Entrada: nenhuma (opera em toro_s global)
+; Saída: toro_phi atualizado
+; PRIMO=11×3=33 (toro + NEON)
+; EMA Q16.16: s_new[d] = (s[d]*49152 + sin(phase+d)*16384) >> 16
+;             sin() implementada como rotação toroidal Q16.16
+; ══════════════════════════════════════════════════════════════════════════════
+.align 4
+toro_step_neon:
+    stp  x29, x30, [sp, #-64]!
+    mov  x29, sp
+
+    ; Carrega fase atual
+    adr  x19, toro_phase
+    ldr  w20, [x19]             ; w20 = phase (0..41)
+
+    ; EMA NEON para dims 0..3 (128 bits = 4 × uint32)
+    adr  x21, toro_s
+    ld1  {v0.4s}, [x21]         ; v0 = s[0..3]
+
+    ; EMA: s_new = (s*49152 + input*16384) >> 16
+    ; input[d] = sin_q16(phase + d)
+    ; sin_q16 aproximação: sin(x) ≈ x para x pequeno, usa rotação toroidal
+    ; Rotação Q16.16: input = ((phase*9804 + d*2731) & 0xFFFF)
+    ; 9804 = π/2 / 42 em Q16.16 (divide o período)
+    ; 2731 = separação entre dimensões
+
+    mov  w22, #9804
+    mul  w23, w20, w22          ; phase * 9804
+
+    ; Gera vetor de inputs para dims 0..3
+    mov  w22, #0
+    add  w24, w23, w22
+    and  w24, w24, #0xFFFF
+    mov  w22, #2731
+    add  w25, w23, w22
+    and  w25, w25, #0xFFFF
+    lsl  w22, w22, #1
+    add  w26, w23, w22
+    and  w26, w26, #0xFFFF
+    mov  w22, #8193             ; 2731*3
+    add  w27, w23, w22
+    and  w27, w27, #0xFFFF
+
+    ; Monta vetor input
+    ins  v1.s[0], w24
+    ins  v1.s[1], w25
+    ins  v1.s[2], w26
+    ins  v1.s[3], w27
+
+    ; Constantes EMA
+    movi v2.4s, #0xC0, lsl #8  ; 49152 = 0xC000
+    movi v3.4s, #0x40, lsl #8  ; 16384 = 0x4000
+
+    ; s_new[0..3] = (s[0..3]*49152 + input[0..3]*16384) >> 16
+    umull  v4.2d, v0.2s, v2.2s         ; lo: s[0..1]*49152
+    umull2 v5.2d, v0.4s, v2.4s         ; hi: s[2..3]*49152
+    umull  v6.2d, v1.2s, v3.2s         ; lo: in[0..1]*16384
+    umull2 v7.2d, v1.4s, v3.4s         ; hi: in[2..3]*16384
+    add    v4.2d, v4.2d, v6.2d
+    add    v5.2d, v5.2d, v7.2d
+    shrn   v0.2s,  v4.2d, #16
+    shrn2  v0.4s,  v5.2d, #16          ; v0 = s_new[0..3]
+
+    st1  {v0.4s}, [x21]                ; armazena s_new[0..3]
+
+    ; Dims 4..6 (3 restantes) — escalar
+    add  x21, x21, #16                 ; aponta para s[4]
+    mov  w22, #9804
+    mul  w23, w20, w22
+
+    mov  w24, #(2731*4)
+    add  w24, w23, w24
+    and  w24, w24, #0xFFFF
+    ldr  w25, [x21, #0]
+    mov  w26, #49152
+    mul  w27, w25, w26          ; w27 = s[4]*49152 (32-bit ok p/ Q16)
+    mov  w26, #16384
+    madd w27, w24, w26, w27    ; += input*16384
+    lsr  w27, w27, #16
+    str  w27, [x21, #0]
+
+    mov  w24, #(2731*5)
+    add  w24, w23, w24
+    and  w24, w24, #0xFFFF
+    ldr  w25, [x21, #4]
+    mov  w26, #49152
+    mul  w27, w25, w26
+    mov  w26, #16384
+    madd w27, w24, w26, w27
+    lsr  w27, w27, #16
+    str  w27, [x21, #4]
+
+    mov  w24, #(2731*6)
+    add  w24, w23, w24
+    and  w24, w24, #0xFFFF
+    ldr  w25, [x21, #8]
+    mov  w26, #49152
+    mul  w27, w25, w26
+    mov  w26, #16384
+    madd w27, w24, w26, w27
+    lsr  w27, w27, #16
+    str  w27, [x21, #8]
+
+    ; Atualiza phase = (phase + 1) % 42
+    add  w20, w20, #1
+    mov  w21, #42
+    udiv w22, w20, w21
+    msub w20, w22, w21, w20    ; w20 = phase mod 42
+    adr  x1, toro_phase
+    str  w20, [x1]
+
+    ; Atualiza step
+    adr  x1, toro_step
+    ldr  x0, [x1]
+    add  x0, x0, #1
+    str  x0, [x1]
+
+    ; Recalcula CRC32C do estado → encadeia em toro_chain
+    adr  x0, toro_s
+    mov  x1, #28
+    bl   generic_crc32c_64     ; w0 = CRC estado atual
+
+    adr  x1, toro_chain
+    ldr  w2, [x1]
+    eor  w2, w2, w0            ; chain ^= new_crc (encadeamento)
+    str  w2, [x1]
+    adr  x1, toro_crc
+    str  w0, [x1]              ; armazena CRC do estado
+
+    ; Atualiza phi = toro_s[0] (saída primária)
+    adr  x0, toro_s
+    ldr  w0, [x0]
+    adr  x1, toro_phi
+    str  w0, [x1]
+
+    ldp  x29, x30, [sp], #64
+    ret
+
+; Alias para path genérico (sem NEON) — mesma lógica, escalar
+generic_toro_step:
+    b    toro_step_neon         ; no AArch64 NEON é mandatório
+
+; ══════════════════════════════════════════════════════════════════════════════
+; hw_crc32c_block — CRC32C via instrução ARM64 CRC32C HW
+; x0 = ponteiro buffer, x1 = len
+; Retorna w0 = CRC32C
+; PRIMO=5 (validação)
+; Requer HWCAP_CRC32 — verificar antes de chamar
+; ══════════════════════════════════════════════════════════════════════════════
+.align 4
+hw_crc32c_block:
+    mov  w2, #~0                ; CRC inicial = 0xFFFFFFFF
+
+    ; Processa 8 bytes por iteração
+    cmp  x1, #8
+    b.lt .crc64_tail4
+
+.crc64_loop8:
+    ldr  x3, [x0], #8
+    .inst 0x9AC14842           ; crc32cx w2, w2, x3
+    ; crc32cx w2, w2, x3 — instrução CRC32C 64-bit
+    ; Encoding: 0x9AC148xx onde xx=(Rd|(Rn<<5)|(Rm<<16))
+    sub  x1, x1, #8
+    cmp  x1, #8
+    b.ge .crc64_loop8
+
+.crc64_tail4:
+    cmp  x1, #4
+    b.lt .crc64_tail1
+    ldr  w3, [x0], #4
+    .inst 0x1AC14842           ; crc32cw w2, w2, w3
+    sub  x1, x1, #4
+
+.crc64_tail1:
+    cbz  x1, .crc64_done
+.crc64_loop1:
+    ldrb w3, [x0], #1
+    .inst 0x1AC14042           ; crc32cb w2, w2, w3
+    subs x1, x1, #1
+    b.ne .crc64_loop1
+
+.crc64_done:
+    mvn  w0, w2                ; ~CRC = resultado final
+    ret
+
+; ══════════════════════════════════════════════════════════════════════════════
+; generic_crc32c_64 — CRC32C SOFTWARE (Castagnoli RFC 3720)
+; x0 = buf, x1 = len
+; Retorna w0 = CRC32C
+; Tabela em crc_table[] (inicializada por init_crc_table_arm64)
+; PRIMO=5 (validação — mesmo primo, implementação diferente)
+; ══════════════════════════════════════════════════════════════════════════════
+.align 4
+generic_crc32c_64:
+    stp  x29, x30, [sp, #-16]!
+    mov  x29, sp
+
+    mov  w2, #~0               ; crc = 0xFFFFFFFF
+    adr  x3, crc_table
+    cbz  x1, .gcrc_done
+
+.gcrc_loop:
+    ldrb w4, [x0], #1         ; byte
+    eor  w4, w2, w4
+    and  w4, w4, #0xFF         ; índice na tabela
+    lsr  w2, w2, #8
+    ldr  w5, [x3, x4, lsl #2] ; crc_table[índice]
+    eor  w2, w2, w5
+    subs x1, x1, #1
+    b.ne .gcrc_loop
+
+.gcrc_done:
+    mvn  w0, w2
+    ldp  x29, x30, [sp], #16
+    ret
+
+; ══════════════════════════════════════════════════════════════════════════════
+; init_crc_table_arm64 — Inicializa tabela CRC32C (poly=0x82F63B78)
+; Chama apenas uma vez em _start
+; ══════════════════════════════════════════════════════════════════════════════
+.align 4
+init_crc_table_arm64:
+    adr  x0, crc_table
+    mov  w1, #0                ; i = 0
+    mov  w2, #0x82F63B78       ; polinômio Castagnoli
+
+.crc_tbl_loop:
+    mov  w3, w1                ; v = i
+    mov  w4, #8                ; 8 bits
+.crc_tbl_bits:
+    tst  w3, #1
+    lsr  w3, w3, #1
+    b.eq .crc_tbl_next_bit
+    eor  w3, w3, w2
+.crc_tbl_next_bit:
+    subs w4, w4, #1
+    b.ne .crc_tbl_bits
+
+    str  w3, [x0, x1, lsl #2] ; crc_table[i] = v
+    add  w1, w1, #1
+    cmp  w1, #256
+    b.lt .crc_tbl_loop
+    ret
+
+; ══════════════════════════════════════════════════════════════════════════════
+; neon_memcpy128 — memcpy NEON ARM64: 128 bytes por iteração (8×ld1)
+; x0=dst, x1=src, x2=len
+; PRIMO=2 (movimento de dados — fundamental)
+; ══════════════════════════════════════════════════════════════════════════════
+.align 4
+neon_memcpy128:
+    cmp  x2, #128
+    b.lt .neon_mc_32
+
+.neon_mc_128:
+    ld1  {v0.16b,v1.16b,v2.16b,v3.16b}, [x1], #64
+    ld1  {v4.16b,v5.16b,v6.16b,v7.16b}, [x1], #64
+    st1  {v0.16b,v1.16b,v2.16b,v3.16b}, [x0], #64
+    st1  {v4.16b,v5.16b,v6.16b,v7.16b}, [x0], #64
+    subs x2, x2, #128
+    b.ge .neon_mc_128
+    cbz  x2, .neon_mc_done
+
+.neon_mc_32:
+    cmp  x2, #32
+    b.lt .neon_mc_byte
+    ld1  {v0.16b,v1.16b}, [x1], #32
+    st1  {v0.16b,v1.16b}, [x0], #32
+    subs x2, x2, #32
+    b.ne .neon_mc_32
+
+.neon_mc_byte:
+    cbz  x2, .neon_mc_done
+.neon_mc_b1:
+    ldrb w3, [x1], #1
+    strb w3, [x0], #1
+    subs x2, x2, #1
+    b.ne .neon_mc_b1
+
+.neon_mc_done:
+    ret
+
+; Versão genérica (fallback)
+generic_memcpy64:
+    cbz  x2, .gmc_done
+.gmc_loop:
+    ldrb w3, [x1], #1
+    strb w3, [x0], #1
+    subs x2, x2, #1
+    b.ne .gmc_loop
+.gmc_done:
+    ret
+
+; ══════════════════════════════════════════════════════════════════════════════
+; neon_memset128 — memset NEON ARM64: 128 bytes por iteração
+; x0=dst, w1=byte, x2=len
+; PRIMO=3 (inicialização — segundo fundamental)
+; ══════════════════════════════════════════════════════════════════════════════
+.align 4
+neon_memset128:
+    dup  v0.16b, w1             ; propaga byte em vetor 128-bit
+
+    cmp  x2, #128
+    b.lt .neon_ms_16
+
+.neon_ms_128:
+    st1  {v0.16b}, [x0], #16
+    st1  {v0.16b}, [x0], #16
+    st1  {v0.16b}, [x0], #16
+    st1  {v0.16b}, [x0], #16
+    st1  {v0.16b}, [x0], #16
+    st1  {v0.16b}, [x0], #16
+    st1  {v0.16b}, [x0], #16
+    st1  {v0.16b}, [x0], #16
+    subs x2, x2, #128
+    b.ge .neon_ms_128
+    cbz  x2, .neon_ms_done
+
+.neon_ms_16:
+    cmp  x2, #16
+    b.lt .neon_ms_byte
+    st1  {v0.16b}, [x0], #16
+    subs x2, x2, #16
+    b.ne .neon_ms_16
+
+.neon_ms_byte:
+    cbz  x2, .neon_ms_done
+.neon_ms_b1:
+    strb w1, [x0], #1
+    subs x2, x2, #1
+    b.ne .neon_ms_b1
+.neon_ms_done:
+    ret
+
+generic_memset64:
+    cbz  x2, .gms_done
+.gms_loop:
+    strb w1, [x0], #1
+    subs x2, x2, #1
+    b.ne .gms_loop
+.gms_done:
+    ret
+
+; ══════════════════════════════════════════════════════════════════════════════
+; generic_ema_q16 — EMA Q16.16 escalar (sem NEON)
+; x0=old_q16, x1=input_q16 → retorna w0=ema_q16
+; EMA: (old*49152 + in*16384) >> 16
+; PRIMO=7 (suavização de estado)
+; ══════════════════════════════════════════════════════════════════════════════
+.align 4
+generic_ema_q16:
+    mov  w2, #49152             ; 0.75 em Q16.16
+    mov  w3, #16384             ; 0.25 em Q16.16
+    umull x4, w0, w2            ; old * 49152
+    umull x5, w1, w3            ; in  * 16384
+    add  x4, x4, x5
+    lsr  w0, w4, #16            ; >> 16 = resultado Q16.16
+    ret
+
+; ══════════════════════════════════════════════════════════════════════════════
+; ema_neon_7d — EMA Q16.16 para 7 dimensões com NEON (processa 4+3)
+; x0=ptr_old[7], x1=ptr_in[7], x2=ptr_out[7]
+; PRIMO=7×3=21 (EMA + NEON)
+; ══════════════════════════════════════════════════════════════════════════════
+.align 4
+ema_neon_7d:
+    ld1  {v0.4s}, [x0]         ; old[0..3]
+    ld1  {v1.4s}, [x1]         ; in[0..3]
+
+    movi v2.4s, #0xC0, lsl #8  ; 49152
+    movi v3.4s, #0x40, lsl #8  ; 16384
+
+    umull  v4.2d, v0.2s, v2.2s
+    umull2 v5.2d, v0.4s, v2.4s
+    umull  v6.2d, v1.2s, v3.2s
+    umull2 v7.2d, v1.4s, v3.4s
+    add    v4.2d, v4.2d, v6.2d
+    add    v5.2d, v5.2d, v7.2d
+    shrn   v0.2s, v4.2d, #16
+    shrn2  v0.4s, v5.2d, #16
+    st1  {v0.4s}, [x2]         ; out[0..3]
+
+    ; dims 4..6 escalar
+    add  x0, x0, #16
+    add  x1, x1, #16
+    add  x2, x2, #16
+    mov  w4, #49152
+    mov  w5, #16384
+
+    ldr  w6, [x0, #0]
+    ldr  w7, [x1, #0]
+    umull x8, w6, w4
+    umull x9, w7, w5
+    add  x8, x8, x9
+    lsr  w8, w8, #16
+    str  w8, [x2, #0]
+
+    ldr  w6, [x0, #4]
+    ldr  w7, [x1, #4]
+    umull x8, w6, w4
+    umull x9, w7, w5
+    add  x8, x8, x9
+    lsr  w8, w8, #16
+    str  w8, [x2, #4]
+
+    ldr  w6, [x0, #8]
+    ldr  w7, [x1, #8]
+    umull x8, w6, w4
+    umull x9, w7, w5
+    add  x8, x8, x9
+    lsr  w8, w8, #16
+    str  w8, [x2, #8]
+    ret
+
+; ══════════════════════════════════════════════════════════════════════════════
+; generic_entropy — Calcula entropia como unique_bytes/256*65535
+; x0=buf, x1=len → retorna w0=entropia Q16.16
+; Limite: processa no máximo 4096 bytes
+; PRIMO=13 (medição de caos)
+; ══════════════════════════════════════════════════════════════════════════════
+.align 4
+generic_entropy:
+    stp  x29, x30, [sp, #-48]!
+    mov  x29, sp
+
+    ; Tabela seen[256] na stack (32 bytes = 256 bits como bitset)
+    sub  sp, sp, #32
+    mov  x2, sp
+    mov  x3, #32
+.ent_zero:
+    str  xzr, [x2], #8
+    subs x3, x3, #8
+    b.ne .ent_zero
+    mov  x2, sp
+
+    mov  x3, #4096
+    cmp  x1, x3
+    csel x1, x1, x3, lt        ; min(len, 4096)
+
+    mov  x4, #0                ; unique count
+    mov  x5, x0                ; ptr
+
+.ent_loop:
+    ldrb w6, [x5], #1
+    ; Testa bit w6 no bitset
+    and  w7, w6, #7            ; bit offset
+    lsr  w8, w6, #3            ; byte index
+    ldrb w9, [x2, x8]
+    lsr  w10, w9, w7
+    tst  w10, #1
+    b.ne .ent_already_seen
+    orr  w9, w9, w10           ; marca bit
+    mov  w10, #1
+    lsl  w10, w10, w7
+    orr  w9, w9, w10
+    strb w9, [x2, x8]
+    add  x4, x4, #1
+.ent_already_seen:
+    subs x1, x1, #1
+    b.ne .ent_loop
+
+    ; resultado = (unique * 65535) / 256
+    mov  w5, #65535
+    mul  w0, w4, w5
+    lsr  w0, w0, #8            ; /256
+
+    add  sp, sp, #32
+    ldp  x29, x30, [sp], #48
+    ret
+
+; ══════════════════════════════════════════════════════════════════════════════
+; arena_alloc — Aloca n bytes da arena BSS (bump pointer, sem malloc)
+; x0 = n (tamanho alinhado para 8)
+; Retorna x0 = ponteiro ou 0 se esgotou
+; PRIMO=2×3=6 (fundação + init)
+; ══════════════════════════════════════════════════════════════════════════════
+.align 4
+arena_alloc:
+    ; Alinha n para múltiplo de 8
+    add  x0, x0, #7
+    and  x0, x0, #~7
+
+    adr  x1, arena_bump
+    ldr  x2, [x1]              ; bump atual
+    add  x3, x2, x0            ; novo bump
+
+    ; Verifica overflow: bump + n <= arena_mem + G_ARENA_SZ
+    adr  x4, arena_mem
+    add  x4, x4, #G_ARENA_SZ
+    cmp  x3, x4
+    b.gt .arena_full
+
+    str  x3, [x1]              ; atualiza bump
+    mov  x0, x2                ; retorna ponteiro anterior
+    ret
+
+.arena_full:
+    mov  x0, #0                ; NULL — arena esgotada
+    ret
+
+; ══════════════════════════════════════════════════════════════════════════════
+; rafaclone — fork seguro para Android (SYS_clone com SIGCHLD)
+; Retorna x0: 0=filho, pid=pai, <0=erro
+; PRIMO=57 (fork — número primo que identifica fork no espaço de syscalls)
+; ══════════════════════════════════════════════════════════════════════════════
+.align 4
+rafaclone:
+    stp  x29, x30, [sp, #-16]!
+    mov  x29, sp
+    mov  x0, #SIGCHLD           ; flags = SIGCHLD (clone como fork)
+    mov  x1, #0                 ; child_stack = NULL (herda stack do pai)
+    mov  x2, #0                 ; parent_tidptr
+    mov  x3, #0                 ; child_tidptr
+    mov  x8, #SYS_clone
+    svc  #0
+    ldp  x29, x30, [sp], #16
+    ret
+
+; ══════════════════════════════════════════════════════════════════════════════
+; print_hex32 — Imprime w0 como hexadecimal de 8 dígitos em STDOUT
+; Não usa printf. Usa escrita direta via SYS_write.
+; PRIMO=19 (saída formata — ponte hardware↔usuário)
+; ══════════════════════════════════════════════════════════════════════════════
+.align 4
+print_hex32:
+    stp  x29, x30, [sp, #-32]!
+    mov  x29, sp
+
+    adr  x1, hex_buf
+    mov  x2, #0x30303030       ; '0000'
+    str  w2, [x1]
+    str  w2, [x1, #4]
+
+    ; Converte 8 nibbles de w0 em ASCII hex
+    mov  x3, #7
+.phex_loop:
+    and  w4, w0, #0xF
+    cmp  w4, #10
+    b.lt .phex_digit
+    add  w4, w4, #('a'-10)
+    b    .phex_store
+.phex_digit:
+    add  w4, w4, #'0'
+.phex_store:
+    strb w4, [x1, x3]
+    lsr  w0, w0, #4
+    subs x3, x3, #1
+    b.ge .phex_loop
+
+    ; Escreve hex_buf[0..7]
+    mov  x0, #STDOUT
+    mov  x2, #8
+    mov  x8, #SYS_write
+    svc  #0
+
+    ldp  x29, x30, [sp], #32
+    ret
+
+; ══════════════════════════════════════════════════════════════════════════════
+; print_caps_arm64 — Imprime capacidades HW detectadas
+; ══════════════════════════════════════════════════════════════════════════════
+.align 4
+print_caps_arm64:
+    stp  x29, x30, [sp, #-16]!
+    mov  x29, sp
+
+    mov  x0, #STDOUT
+    adr  x1, banner_caps
+    mov  x2, #banner_caps_len
+    mov  x8, #SYS_write
+    svc  #0
+
+    adr  x0, g_has_neon
+    ldrb w0, [x0]
+    cbz  w0, .pc64_crc
+    mov  x0, #STDOUT
+    adr  x1, str_neon
+    mov  x2, #5
+    mov  x8, #SYS_write
+    svc  #0
+
+.pc64_crc:
+    adr  x0, g_has_crc32hw
+    ldrb w0, [x0]
+    cbz  w0, .pc64_aes
+    mov  x0, #STDOUT
+    adr  x1, str_crc32
+    mov  x2, #6
+    mov  x8, #SYS_write
+    svc  #0
+
+.pc64_aes:
+    adr  x0, g_has_aes_hw
+    ldrb w0, [x0]
+    cbz  w0, .pc64_sha2
+    mov  x0, #STDOUT
+    adr  x1, str_aes
+    mov  x2, #4
+    mov  x8, #SYS_write
+    svc  #0
+
+.pc64_sha2:
+    adr  x0, g_has_sha2
+    ldrb w0, [x0]
+    cbz  w0, .pc64_lse
+    mov  x0, #STDOUT
+    adr  x1, str_sha2
+    mov  x2, #5
+    mov  x8, #SYS_write
+    svc  #0
+
+.pc64_lse:
+    adr  x0, g_has_atomics
+    ldrb w0, [x0]
+    cbz  w0, .pc64_sve
+    mov  x0, #STDOUT
+    adr  x1, str_atomics
+    mov  x2, #4
+    mov  x8, #SYS_write
+    svc  #0
+
+.pc64_sve:
+    adr  x0, g_has_sve
+    ldrb w0, [x0]
+    cbz  w0, .pc64_nl
+    mov  x0, #STDOUT
+    adr  x1, str_sve
+    mov  x2, #4
+    mov  x8, #SYS_write
+    svc  #0
+
+.pc64_nl:
+    mov  x0, #STDOUT
+    adr  x1, str_nl
+    mov  x2, #2
+    mov  x8, #SYS_write
+    svc  #0
+
+    ldp  x29, x30, [sp], #16
+    ret
+
+print_exit_crc:
+    stp  x29, x30, [sp, #-16]!
+    mov  x29, sp
+    mov  x21, x20               ; salva crc
+
+    mov  x0, #STDOUT
+    adr  x1, str_exit_msg
+    mov  x2, #str_exit_msg_len
+    mov  x8, #SYS_write
+    svc  #0
+
+    mov  w0, x21
+    bl   print_hex32
+
+    mov  x0, #STDOUT
+    adr  x1, str_bye
+    mov  x2, #2
+    mov  x8, #SYS_write
+    svc  #0
+
+    ldp  x29, x30, [sp], #16
+    ret
+
+; ══════════════════════════════════════════════════════════════════════════════
+; repl_arm64 — FASE 4: REPL ENTERPRISE FREESTANDING
+; Loop: prompt → read → parse → exec (fork/exec ou builtin) → toro_step → repeat
+; PRIMO=31 (inclusão + distribuição — o REPL conecta tudo)
+; ══════════════════════════════════════════════════════════════════════════════
+.align 4
+repl_arm64:
+    stp  x29, x30, [sp, #-64]!
+    mov  x29, sp
+
+.repl_loop:
+    ; ── Prompt ────────────────────────────────────────────────────────────
+    mov  x0, #STDOUT
+    adr  x1, str_prompt
+    mov  x2, #str_prompt_len
+    mov  x8, #SYS_write
+    svc  #0
+
+    ; ── Read ──────────────────────────────────────────────────────────────
+    mov  x0, #STDIN
+    adr  x1, io_buf
+    mov  x2, #2047
+    mov  x8, #SYS_read
+    svc  #0
+
+    cmp  x0, #0
+    ble  .repl_exit             ; EOF
+
+    mov  x19, x0               ; x19 = bytes lidos
+
+    ; ── Linha vazia? ──────────────────────────────────────────────────────
+    cmp  x19, #1
+    b.le .repl_toro_tick        ; só \n — avança toro e reprompta
+
+    ; ── Strip \n ──────────────────────────────────────────────────────────
+    adr  x20, io_buf
+    sub  x1, x19, #1
+    strb wzr, [x20, x1]
+
+    ; ── Parse: checa built-ins ─────────────────────────────────────────────
+    ; "exit" → sai
+    ldr  w1, [x20]             ; primeiros 4 bytes como uint32
+    ldr  w2, =0x74697865       ; 'exit' little-endian
+    cmp  w1, w2
+    b.eq .repl_exit
+
+    ; "status" → imprime estado toro
+    adr  x2, cmd_status
+    bl   strncmp6
+    cbz  x0, .repl_status
+
+    ; "toro" → imprime toro state
+    adr  x2, cmd_toro
+    bl   strncmp4
+    cbz  x0, .repl_toro_print
+
+    ; "crc" → imprime CRC chain
+    adr  x2, cmd_crc
+    bl   strncmp3
+    cbz  x0, .repl_crc_print
+
+    ; "caps" → re-imprime capacidades
+    adr  x2, cmd_caps
+    bl   strncmp4
+    cbz  x0, .repl_caps_print
+
+    ; "help" → mensagem de ajuda
+    adr  x2, cmd_help
+    bl   strncmp4
+    cbz  x0, .repl_help
+
+    ; ── Comando externo: rafaclone → execve /system/bin/sh -c cmd ────────
+    bl   rafaclone
+
+    cmp  x0, #0
+    beq  .repl_child            ; filho
+    blt  .repl_toro_tick        ; clone falhou → toro tick e tenta de novo
+
+    ; PAI: wait4
+    mov  x1, x0                ; pid
+    mov  x0, #-1
+    adr  x2, proc_status
+    mov  x3, #0
+    mov  x4, #0
+    mov  x8, #SYS_wait4
+    svc  #0
+
+    ; Avança toro após execução
+    b    .repl_toro_tick
+
+.repl_child:
+    ; Monta argv na stack (16-byte aligned)
+    sub  sp, sp, #48
+    str  xzr, [sp, #32]                    ; NULL
+
+    adr  x0, io_buf
+    str  x0, [sp, #24]                     ; argv[2] = cmd
+
+    adr  x0, arg1_c
+    str  x0, [sp, #16]                     ; argv[1] = "-c"
+
+    adr  x0, arg0_sh
+    str  x0, [sp,  #8]                     ; argv[0] = "sh"
+
+    ; Tenta /data/data/com.termux/.../sh primeiro
+    adr  x0, path_sh_termux
+    mov  x1, sp
+    adr  x2, saved_envp
+    ldr  x2, [x2]
+    mov  x8, #SYS_execve
+    svc  #0
+    ; Se falhou, tenta /system/bin/sh
+    adr  x0, path_sh_system
+    svc  #0
+    ; Último fallback: /bin/sh
+    adr  x0, path_sh_bin
+    svc  #0
+
+    ; Tudo falhou
+    mov  x0, #127
+    mov  x8, #SYS_exit
+    svc  #0
+
+.repl_status:
+    ; Imprime phi, step, chain, phase
+    adr  x0, toro_phi
+    ldr  w0, [x0]
+    bl   print_hex32
+    mov  x0, #STDOUT
+    adr  x1, str_nl
+    mov  x2, #2
+    mov  x8, #SYS_write
+    svc  #0
+    b    .repl_toro_tick
+
+.repl_toro_print:
+    ; Imprime os 7 valores do toro
+    adr  x22, toro_s
+    mov  x23, #7
+.repl_toro_loop:
+    ldr  w0, [x22], #4
+    bl   print_hex32
+    mov  x0, #STDOUT
+    adr  x1, str_nl
+    mov  x2, #2
+    mov  x8, #SYS_write
+    svc  #0
+    subs x23, x23, #1
+    b.ne .repl_toro_loop
+    b    .repl_toro_tick
+
+.repl_crc_print:
+    adr  x0, toro_chain
+    ldr  w0, [x0]
+    bl   print_hex32
+    mov  x0, #STDOUT
+    adr  x1, str_nl
+    mov  x2, #2
+    mov  x8, #SYS_write
+    svc  #0
+    b    .repl_toro_tick
+
+.repl_caps_print:
+    bl   print_caps_arm64
+    b    .repl_toro_tick
+
+.repl_help:
+    mov  x0, #STDOUT
+    adr  x1, msg_help
+    mov  x2, #msg_help_len
+    mov  x8, #SYS_write
+    svc  #0
+    b    .repl_toro_tick
+
+.repl_toro_tick:
+    ; Avança o toro um passo em cada ciclo do REPL
+    adr  x0, dispatch_toro
+    ldr  x0, [x0]              ; ponteiro para toro_step
+    blr  x0                    ; chama via dispatch table
+
+    b    .repl_loop
+
+.repl_exit:
+    ldp  x29, x30, [sp], #64
+    ret
+
+; ── Helpers de comparação de string sem strncmp ──────────────────────────────
+; x20 = io_buf, x2 = cmd string → w0 = 0 se igual
+strncmp3:
+    ldrb w3, [x20, #0]; ldrb w4, [x2, #0]; cmp w3,w4; b.ne .scmp_no
+    ldrb w3, [x20, #1]; ldrb w4, [x2, #1]; cmp w3,w4; b.ne .scmp_no
+    ldrb w3, [x20, #2]; ldrb w4, [x2, #2]; cmp w3,w4; b.ne .scmp_no
+    mov w0,#0; ret
+strncmp4:
+    ldrb w3, [x20, #0]; ldrb w4, [x2, #0]; cmp w3,w4; b.ne .scmp_no
+    ldrb w3, [x20, #1]; ldrb w4, [x2, #1]; cmp w3,w4; b.ne .scmp_no
+    ldrb w3, [x20, #2]; ldrb w4, [x2, #2]; cmp w3,w4; b.ne .scmp_no
+    ldrb w3, [x20, #3]; ldrb w4, [x2, #3]; cmp w3,w4; b.ne .scmp_no
+    mov w0,#0; ret
+strncmp6:
+    ldrb w3, [x20, #0]; ldrb w4, [x2, #0]; cmp w3,w4; b.ne .scmp_no
+    ldrb w3, [x20, #1]; ldrb w4, [x2, #1]; cmp w3,w4; b.ne .scmp_no
+    ldrb w3, [x20, #2]; ldrb w4, [x2, #2]; cmp w3,w4; b.ne .scmp_no
+    ldrb w3, [x20, #3]; ldrb w4, [x2, #3]; cmp w3,w4; b.ne .scmp_no
+    ldrb w3, [x20, #4]; ldrb w4, [x2, #4]; cmp w3,w4; b.ne .scmp_no
+    ldrb w3, [x20, #5]; ldrb w4, [x2, #5]; cmp w3,w4; b.ne .scmp_no
+    mov w0,#0; ret
+.scmp_no:
+    mov w0,#1; ret
+
+; ══════════════════════════════════════════════════════════════════════════════
+; FIM bootstrap_arm64_adaptive.s
+; ══════════════════════════════════════════════════════════════════════════════
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
