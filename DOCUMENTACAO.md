@@ -788,3 +788,21 @@ Este fork mantém a licença GPLv3 do projeto original Termux.
 
 ### Governança e Auditabilidade Multi-IA
 - [FRAMEWORK_MULTI_IA_SPEC_V1.md](FRAMEWORK_MULTI_IA_SPEC_V1.md) - Especificação de governança, privacidade, rastreabilidade e proteção humana.
+
+## Governança de promoção de artefatos `Arme/` (Release)
+
+- Diretórios canônicos para produção:
+  - `Arme/spec/`
+  - `Arme/include/`
+  - `Arme/src/c/`
+  - `Arme/src/asm/arm32/`
+  - `Arme/src/asm/arm64/`
+  - `Arme/tests/`
+  - `Arme/bench/`
+  - `Arme/reports/`
+- `Arme/Add/` é **somente staging**. Conteúdo em `Arme/Add/` não integra build oficial sem promoção explícita.
+- Promoção obrigatória via `scripts/promote_arme_module.sh`, com três gates:
+  1. classificação e status válidos no `Arme/manifest.json`;
+  2. teste mínimo de equivalência C/ASM em `Arme/tests/equivalence/<id>.sh`;
+  3. trilha de auditoria em `Arme/reports/promotion_audit.log`.
+- CI bloqueia PR/push com novos arquivos `.c/.h/.S` em `Arme/Add/` sem entrada correspondente no manifesto através do workflow `.github/workflows/arme-add-governance.yml`.

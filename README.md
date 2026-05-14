@@ -683,3 +683,9 @@ Este repositório não declara certificação formal baseada em ISO, conformidad
 - Este estágio **não** é freestanding com `_raf_start` como entrypoint final de produto.
 - Este estágio **não** é uma biblioteca `.so` JNI para consumo Android app.
 - Próximo target planejado: trilhas dedicadas para **freestanding** e **`librmr.so`**.
+
+### Governança de promoção `Arme/`
+
+- `Arme/Add/` é staging de ingestão e **não** entra na trilha oficial de build/release sem promoção.
+- Promoções devem usar `scripts/promote_arme_module.sh` para validar manifesto, exigir teste mínimo de equivalência C/ASM e registrar auditoria em `Arme/reports/promotion_audit.log`.
+- O CI aplica bloqueio para novos `.c/.h/.S` em `Arme/Add/` sem entrada correspondente em `Arme/manifest.json`.
