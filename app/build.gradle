@@ -566,6 +566,11 @@ tasks.register("ensureBootstrapArchives") {
     dependsOn(useDevBootstrap ? tasks.named("buildDeveloperBootstraps") : tasks.named("validateRewrittenBootstraps"))
     dependsOn(tasks.named("validateBootstrapBlake3Config"))
 }
+def isLocalBootstrapMode() {
+    return (project.findProperty("RAF_BOOTSTRAP_SOURCE") ?: System.getenv("RAF_BOOTSTRAP_SOURCE") ?: "")
+        .toString()
+        .toLowerCase() == "local"
+}
 def requiredBootstrapMetadata(File file, String expectedPackageName, String expectedPageSize, String validationMode) {
     def zipFile = new java.util.zip.ZipFile(file)
     try {
@@ -620,7 +625,9 @@ def requiredBootstrapMetadata(File file, String expectedPackageName, String expe
 afterEvaluate {
     android.applicationVariants.all { variant ->
         variant.preBuildProvider.get().dependsOn(ensureBootstrapArchives)
-        variant.preBuildProvider.get().dependsOn(tasks.named("validateRewrittenBootstraps"))
+        if (!isLocalBootstrapMode()) {
+            variant.preBuildProvider.get().dependsOn(tasks.named("validateRewrittenBootstraps"))
+        }
         variant.javaCompileProvider.get().dependsOn(ensureBootstrapArchives)
     }
 
@@ -630,13 +637,17 @@ afterEvaluate {
 
     tasks.matching(shouldWireBootstrapDeps).configureEach {
         dependsOn(ensureBootstrapArchives)
-        dependsOn(tasks.named("validateRewrittenBootstraps"))
+        if (!isLocalBootstrapMode()) {
+            dependsOn(tasks.named("validateRewrittenBootstraps"))
+        }
     }
 
     tasks.whenTaskAdded { task ->
         if (shouldWireBootstrapDeps(task)) {
             task.dependsOn(ensureBootstrapArchives)
-            task.dependsOn(tasks.named("validateRewrittenBootstraps"))
+            if (!isLocalBootstrapMode()) {
+                task.dependsOn(tasks.named("validateRewrittenBootstraps"))
+            }
         }
     }
 }

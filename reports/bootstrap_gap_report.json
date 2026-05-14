@@ -1,0 +1,22 @@
+{
+  "report_date_utc": "2026-05-14",
+  "scope": "bootstrap real Termux/RAFCODEΦ com modo local auxiliar",
+  "items": [
+    {"id": 1, "status": "resolvido", "check": "arquivos bootstrap obrigatorios", "repro": "bash scripts/generate_developer_bootstraps.sh"},
+    {"id": 2, "status": "resolvido", "check": "zip valido por checker C", "repro": "bash scripts/verify_bootstrap_contract.sh --check"},
+    {"id": 3, "status": "resolvido", "check": "sha256 emitido para 4 bootstraps", "repro": "bash scripts/verify_bootstrap_contract.sh --check"},
+    {"id": 4, "status": "bloqueado por dependência externa", "check": "blake3 via b3sum quando disponivel", "cause": "b3sum ausente no ambiente", "repro": "bash scripts/verify_bootstrap_contract.sh --check"},
+    {"id": 5, "status": "bloqueado por dependência externa", "check": ":app:downloadBootstraps", "cause": "SDK location not found", "repro": "./gradlew :app:downloadBootstraps --no-daemon"},
+    {"id": 6, "status": "bloqueado por dependência externa", "check": "verify_bootstrap_contract --prepare", "cause": "depende de downloadBootstraps e SDK", "repro": "bash scripts/verify_bootstrap_contract.sh --prepare"},
+    {"id": 7, "status": "resolvido", "check": "verify_bootstrap_contract --check", "repro": "bash scripts/verify_bootstrap_contract.sh --check"},
+    {"id": 8, "status": "faltando", "check": "ensureBootstrapArchives em modo local", "cause": "execucao total bloqueada por SDK ausente; patch aplicado no grafo de tasks", "repro": "RAF_BOOTSTRAP_SOURCE=local ./gradlew :app:ensureBootstrapArchives --no-daemon"},
+    {"id": 9, "status": "resolvido", "check": "fontes minimos bootstrap local presentes", "repro": "test -f bootstrap_src/common/bin/sh && test -f bootstrap_src/common/bin/pkg && test -f bootstrap_src/common/etc/motd"},
+    {"id": 10, "status": "bloqueado por dependência externa", "check": "validacao runtime PREFIX/bin/sh/bin/pkg", "cause": "PREFIX/TERMUX_PREFIX nao definido neste ambiente", "repro": "bash scripts/verify_bootstrap_contract.sh --runtime-prefix-only"},
+    {"id": 11, "status": "resolvido", "check": "checker C compilado e utilizado", "repro": "bash scripts/verify_bootstrap_contract.sh --check"},
+    {"id": 12, "status": "resolvido", "check": "release bloqueia bootstrap ausente/invalido", "repro": "./gradlew :app:verifyBootstrapZipsPresent --no-daemon"}
+  ],
+  "fixes": [
+    "Gradle: dependencia de validateRewrittenBootstraps agora condicional no modo RAF_BOOTSTRAP_SOURCE=local",
+    "Sem substituicao do bootstrap oficial por bootstrap_rafaelia"
+  ]
+}
