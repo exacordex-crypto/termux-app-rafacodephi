@@ -19,7 +19,7 @@ jobs:
             app/src/main/cpp/lowlevel/bootstrap_src/bootstrap_arm64_adaptive.S \
             -o dist/bootstrap/bootstrap_arm64_adaptive.o
       - name: Upload bootstrap object artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bootstrap-arm64-asm-object-${{ github.sha }}
           path: dist/bootstrap/bootstrap_arm64_adaptive.o

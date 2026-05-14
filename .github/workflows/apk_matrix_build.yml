@@ -145,7 +145,7 @@ jobs:
 
       - name: Upload unsigned debug arm64 APK
         if: ${{ inputs.upload_unsigned_debug_arm64 }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-unsigned-debug-arm64-v8a-${{ github.sha }}
           path: dist/apk-matrix/unsigned/*debug*arm64-v8a*.apk
@@ -153,7 +153,7 @@ jobs:
 
       - name: Upload unsigned debug arm32 APK
         if: ${{ inputs.upload_unsigned_debug_arm32 }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-unsigned-debug-armeabi-v7a-${{ github.sha }}
           path: dist/apk-matrix/unsigned/*debug*armeabi-v7a*.apk
@@ -161,7 +161,7 @@ jobs:
 
       - name: Upload unsigned debug universal APK
         if: ${{ inputs.upload_unsigned_debug_universal }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-unsigned-debug-universal-${{ github.sha }}
           path: |
@@ -172,7 +172,7 @@ jobs:
 
       - name: Upload unsigned release arm64 APK (internal track only)
         if: ${{ inputs.release_track == 'internal' && inputs.upload_unsigned_release_arm64 }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-unsigned-release-arm64-v8a-${{ github.sha }}
           path: dist/apk-matrix/unsigned/*release*arm64-v8a*.apk
@@ -180,7 +180,7 @@ jobs:
 
       - name: Upload unsigned release arm32 APK (internal track only)
         if: ${{ inputs.release_track == 'internal' && inputs.upload_unsigned_release_arm32 }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-unsigned-release-armeabi-v7a-${{ github.sha }}
           path: dist/apk-matrix/unsigned/*release*armeabi-v7a*.apk
@@ -188,7 +188,7 @@ jobs:
 
       - name: Upload unsigned release universal APK (internal track only)
         if: ${{ inputs.release_track == 'internal' && inputs.upload_unsigned_release_universal }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-unsigned-release-universal-${{ github.sha }}
           path: |
@@ -199,7 +199,7 @@ jobs:
 
       - name: Upload signed release arm64 APK
         if: ${{ inputs.upload_signed_release_arm64 }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-signed-release-arm64-v8a-${{ github.sha }}
           path: dist/apk-matrix/signed/*release*arm64-v8a*-signed.apk
@@ -207,7 +207,7 @@ jobs:
 
       - name: Upload signed release arm32 APK
         if: ${{ inputs.upload_signed_release_arm32 }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-signed-release-armeabi-v7a-${{ github.sha }}
           path: dist/apk-matrix/signed/*release*armeabi-v7a*-signed.apk
@@ -215,7 +215,7 @@ jobs:
 
       - name: Upload signed release universal APK
         if: ${{ inputs.upload_signed_release_universal }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-signed-release-universal-${{ github.sha }}
           path: |
@@ -226,7 +226,7 @@ jobs:
 
       - name: Upload APK size report
         if: ${{ inputs.upload_report_apk_size }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-report-apk-size-${{ github.sha }}
           path: dist/apk-matrix/APK_SIZE_REPORT.tsv
@@ -234,7 +234,7 @@ jobs:
 
       - name: Upload release size diff report
         if: ${{ inputs.upload_report_size_diff }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-report-apk-size-diff-${{ github.sha }}
           path: dist/apk-matrix/APK_SIZE_DIFF_RELEASE.tsv
@@ -242,7 +242,7 @@ jobs:
 
       - name: Upload SHA256 checksums
         if: ${{ inputs.upload_report_sha256 }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-report-sha256sums-${{ github.sha }}
           path: dist/apk-matrix/SHA256SUMS.txt
@@ -250,7 +250,7 @@ jobs:
 
       - name: Upload artifact manifest
         if: ${{ inputs.upload_report_manifest }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-report-artifact-manifest-${{ github.sha }}
           path: dist/apk-matrix/ARTIFACT_MANIFEST.txt
@@ -258,7 +258,7 @@ jobs:
 
       - name: Upload local signing keystore
         if: ${{ inputs.upload_local_keystore }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-apk-matrix-local-keystore-${{ github.sha }}
           path: dist/local-release.keystore

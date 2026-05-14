@@ -12,7 +12,7 @@ jobs:
       - name: Generate TOP42 placeholders
         run: scripts/run_top42_bench.sh .
       - name: Upload TOP42 artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: top42-artifacts
           path: |

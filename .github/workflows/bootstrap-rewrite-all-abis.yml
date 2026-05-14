@@ -22,7 +22,7 @@ jobs:
           cp app/src/main/cpp/rewritten-bootstrap-arm.zip rewritten-bootstrap-arm.zip
           cp app/src/main/cpp/rewritten-bootstrap-aarch64.zip rewritten-bootstrap-aarch64.zip
           cat build/reports/bootstrap-rewrite/bootstrap-elf-report.txt build/reports/bootstrap-rewrite/bootstrap-text-rewrite-report.txt > bootstrap-rewrite-report-all.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bootstrap-rewrite-all
           path: |

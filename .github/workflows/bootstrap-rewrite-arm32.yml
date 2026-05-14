@@ -25,7 +25,7 @@ jobs:
           cp build/reports/bootstrap-rewrite/bootstrap-elf-report.txt bootstrap-elf-report.txt
           cp build/reports/bootstrap-rewrite/bootstrap-text-rewrite-report.txt bootstrap-text-rewrite-report.txt
           cp build/reports/bootstrap-rewrite/bootstrap-text-rewrite-report.txt bootstrap-rewrite-report-arm.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bootstrap-rewrite-arm
           path: |

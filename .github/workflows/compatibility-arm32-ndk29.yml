@@ -86,7 +86,7 @@ jobs:
           fi
 
       - name: Upload APK artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-rafcodephi-debug-apks-ndk29-${{ github.sha }}
           path: |
@@ -95,7 +95,7 @@ jobs:
             ${{ steps.apks.outputs.universal }}
 
       - name: Upload ARM32 compatibility report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-rafcodephi-arm32-compat-report-ndk29-${{ github.sha }}
           path: |
