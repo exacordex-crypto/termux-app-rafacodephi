@@ -564,6 +564,7 @@ tasks.register("ensureBootstrapArchives") {
     group = 'build setup'
     def useDevBootstrap = (project.findProperty("RAF_BOOTSTRAP_SOURCE") ?: System.getenv("RAF_BOOTSTRAP_SOURCE") ?: "").toString().toLowerCase() == "local"
     dependsOn(useDevBootstrap ? tasks.named("buildDeveloperBootstraps") : tasks.named("validateRewrittenBootstraps"))
+    dependsOn(tasks.named("verifyBootstrapZipsPresent"))
     dependsOn(tasks.named("validateBootstrapBlake3Config"))
 }
 def isLocalBootstrapMode() {
