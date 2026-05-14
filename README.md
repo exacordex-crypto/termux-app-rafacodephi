@@ -689,3 +689,33 @@ Este repositório não declara certificação formal baseada em ISO, conformidad
 - `Arme/Add/` é staging de ingestão e **não** entra na trilha oficial de build/release sem promoção.
 - Promoções devem usar `scripts/promote_arme_module.sh` para validar manifesto, exigir teste mínimo de equivalência C/ASM e registrar auditoria em `Arme/reports/promotion_audit.log`.
 - O CI aplica bloqueio para novos `.c/.h/.S` em `Arme/Add/` sem entrada correspondente em `Arme/manifest.json`.
+
+## Linux/PC user-space contract (Rafaelia)
+
+Camadas separadas e obrigatórias:
+
+1. **Termux bootstrap**: ZIPs por ABI (`bootstrap-aarch64.zip`, `bootstrap-arm.zip`, `bootstrap-i686.zip`, `bootstrap-x86_64.zip`) com hash SHA256/BLAKE3 para contrato de release.
+2. **Linux rootfs em PRoot**: distro real (padrão Debian minimal) instalada em `$PREFIX/var/lib/rafaelia-linux/debian/rootfs`.
+3. **VM/Emulação (QEMU/Vectras)**: camada opcional acima do user-space Linux; não substitui bootstrap nem rootfs.
+
+### Instalar Linux Debian minimal (CLI primeiro)
+
+```bash
+./install-rafaelia-linux.sh
+./start-rafaelia-linux.sh
+```
+
+O instalador:
+- baixa rootfs oficial do `proot-distro` por ABI,
+- valida SHA256 antes da extração,
+- gera `resolv.conf` no rootfs,
+- cria launcher único com binds de `/dev`, `/proc`, `/sys`, `/tmp`, `/sdcard` e home persistente.
+
+Validação inicial recomendada (sem desktop):
+
+```bash
+./start-rafaelia-linux.sh -lc 'cat /etc/os-release'
+./start-rafaelia-linux.sh -lc 'apt update'
+./start-rafaelia-linux.sh -lc 'python3 --version'
+./start-rafaelia-linux.sh -lc 'gcc --version'
+```
