@@ -39,7 +39,7 @@ env:
 
 jobs:
   detect-and-prepare:
-    name: 🔍 Stage 1: Detect & Prepare
+    name: 🔍 Stage 1 Detect & Prepare
     runs-on: ubuntu-latest
     outputs:
       build-matrix: ${{ steps.prepare.outputs.build-matrix }}
@@ -80,7 +80,7 @@ jobs:
           echo "$MATRIX_JSON" | python3 -m json.tool || true
 
   build:
-    name: 🔨 Stage 2: Build (${{ matrix.abi }}) PageSize=${{ matrix.page_size }}
+    name: 🔨 Stage 2 Build (${{ matrix.abi }}) PageSize=${{ matrix.page_size }}
     needs: detect-and-prepare
     runs-on: ubuntu-latest
     strategy:
