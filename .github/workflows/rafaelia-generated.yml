@@ -25,18 +25,19 @@ jobs:
           pip install numpy matplotlib
       - name: Run QPU simulator
         run: |
+          mkdir -p ci_artifacts/generated
           python rmr/Rrr/generated/rafaelia_qpu_simulator.py
+          cp rmr/Rrr/generated/rafaelia_metrics.png ci_artifacts/generated/
       - name: Run auto calibration
         run: |
-          python rmr/Rrr/generated/rafaelia_auto_calibration.py > rmr/Rrr/generated/calibration_result.txt
+          python rmr/Rrr/generated/rafaelia_auto_calibration.py > ci_artifacts/generated/calibration_result.txt
       - name: Archive generated binaries/artifacts
         run: |
-          tar -czf rafaelia_generated_artifacts.tar.gz \
-            rmr/Rrr/generated/rafaelia_metrics.png \
-            rmr/Rrr/generated/calibration_result.txt \
-            rmr/Rrr/generated/rafaelia_isa_spec.md \
-            rmr/Rrr/generated/rafaelia_ctrl_fpga.sv \
-            rmr/Rrr/generated/rafaelia_whitepaper.tex
+          cp rmr/Rrr/generated/rafaelia_isa_spec.md ci_artifacts/generated/
+          cp rmr/Rrr/generated/rafaelia_ctrl_fpga.sv ci_artifacts/generated/
+          cp rmr/Rrr/generated/rafaelia_whitepaper.tex ci_artifacts/generated/
+          cp rmr/Rrr/generated/KNOWLEDGE_FLOW_MATRIX.md ci_artifacts/generated/
+          tar -czf rafaelia_generated_artifacts.tar.gz -C ci_artifacts/generated .
       - uses: actions/upload-artifact@v4
         with:
           name: rafaelia-generated
