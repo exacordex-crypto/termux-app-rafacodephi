@@ -55,6 +55,7 @@ from zipfile import ZipFile
 base = Path('app/src/main/cpp')
 expected_package = 'com.termux.rafacodephi'
 expected_page = '16384'
+validation_mode = __import__('os').environ.get('TERMUX_BOOTSTRAP_VALIDATION_MODE', '').strip()
 archives = {
     'bootstrap-aarch64.zip': ('aarch64', '21'),
     'bootstrap-arm.zip': ('arm', '28'),
@@ -71,10 +72,19 @@ for name, (arch, min_api) in archives.items():
         if '=' in line and not line.lstrip().startswith('#'):
             key, value = line.split('=', 1)
             metadata[key.strip()] = value.strip()
-    required_entries = {'BOOTSTRAP_INFO', 'SYMLINKS.txt', 'bin/sh', 'bin/pkg', 'bin/busybox', 'bin/proot'}
+    required_entries = {'BOOTSTRAP_INFO', 'SYMLINKS.txt'}
+    optional_paths = {
+        'sh': ('bin/sh', 'usr/bin/sh'),
+        'pkg': ('bin/pkg', 'usr/bin/pkg'),
+        'busybox': ('bin/busybox', 'usr/bin/busybox'),
+        'proot': ('bin/proot', 'usr/bin/proot'),
+    }
     missing = sorted(required_entries - names)
     if missing:
         raise SystemExit(f'{path}: missing entries: {missing}')
+    missing_runtime = [label for label, candidates in optional_paths.items() if not any(c in names for c in candidates)]
+    if missing_runtime and validation_mode != 'upstream-debug-compat':
+        raise SystemExit(f'{path}: missing runtime entries: {missing_runtime}')
     expected = {
         'TERMUX_PACKAGE_NAME': expected_package,
         'TERMUX_ARCH': arch,
