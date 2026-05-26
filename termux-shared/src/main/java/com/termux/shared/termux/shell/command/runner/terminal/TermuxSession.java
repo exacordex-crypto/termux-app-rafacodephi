@@ -97,10 +97,10 @@ public class TermuxSession {
             if (!executionCommand.isFailsafe) {
                 Error bootstrapError = TermuxQualityManager.checkBootstrapComplete();
                 if (bootstrapError != null) {
-                    Logger.logError(LOG_TAG, "Bootstrap validation failed: " + bootstrapError.getMessage());
-                    executionCommand.setStateFailed(bootstrapError);
-                    TermuxSession.processTermuxSessionResult(null, executionCommand);
-                    return null;
+                    // Keep terminal bootstrap resilient: missing/corrupted prefix payloads can be
+                    // recovered from an emergency shell, while failing hard here prevents any
+                    // repair workflow from running in-app.
+                    Logger.logWarn(LOG_TAG, "Bootstrap validation failed, continuing with shell fallback: " + bootstrapError.getMessage());
                 }
 
                 // Do not hard-gate terminal startup on bash. The bootstrap contract only
