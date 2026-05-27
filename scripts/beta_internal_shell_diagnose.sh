@@ -99,7 +99,7 @@ for key in nativeLibraryDir primaryCpuAbi dataDir; do
 done
 
 BASE="/data/data/${PACKAGE_NAME}/files/usr"
-for p in "$BASE" "$BASE/bin/sh" "$BASE/bin/pkg" "$BASE/bin/busybox" "$BASE/bin/proot"; do
+for p in "$BASE" "$BASE/bin/sh" "$BASE/bin/pkg" "$BASE/bin/bash" "$BASE/bin/proot" "$BASE/bin/busybox"; do
   out=$(run_adb "if [ -e '$p' ]; then ls -l '$p'; else echo MISSING; fi" | tr -d '\r')
   if echo "$out" | grep -q "MISSING"; then
     if [ "$p" = "$BASE/bin/proot" ] || [ "$p" = "$BASE/bin/busybox" ]; then
@@ -141,7 +141,7 @@ if run_adb "[ -e '$BASE/bin/proot' ] && [ -x '$BASE/bin/proot' ]" >/dev/null 2>&
   if [ -n "$proot_ver" ] && ! echo "$proot_ver" | grep -qiE "not found|No such file|Permission denied"; then
     record "PASS" "proot --version" "$proot_ver"
   else
-    record "FAIL" "proot --version" "proot exists but failed to execute: $proot_ver"
+    record "WARN" "proot --version" "proot exists but failed to execute (non-blocking for first shell): $proot_ver"
   fi
 else
   record "WARN" "proot --version" "proot not present or not executable (non-blocking for first shell)."

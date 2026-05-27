@@ -47,6 +47,11 @@ jobs:
         run: |
           ./scripts/ci_android_preflight.sh
 
+      - name: "🧾 Phase 2.3: Bootstrap contract (prepare/check)"
+        run: |
+          bash scripts/verify_bootstrap_contract.sh --prepare-dev
+          bash scripts/verify_bootstrap_contract.sh --check
+
       - name: "🔨 Phase 3: Build APKs"
         shell: bash {0}
         env:
@@ -93,8 +98,12 @@ jobs:
           export TERMUX_BOOTSTRAP_VALIDATION_MODE="upstream-debug-compat" # Debug-only compatibility rail.
           
           echo "Starting Gradle build process..."
-          if ! ./gradlew assembleDebug; then
+          if ! ./gradlew assembleDebug --no-daemon; then
             exit_on_error "Build failed for '$APK_VERSION_TAG' build."
+          fi
+
+          if ! ./gradlew verifyReleaseContract --no-daemon; then
+            exit_on_error "verifyReleaseContract failed for '$APK_VERSION_TAG' build."
           fi
           
           echo ""
@@ -209,3 +218,15 @@ jobs:
           path: |
             ${{ env.APK_DIR_PATH }}/${{ env.APK_BASENAME_PREFIX }}_sha256sums
             ${{ env.APK_DIR_PATH }}/output-metadata.json
+
+      - name: "📦 Phase 5: Upload bootstrap reports artifact"
+        uses: actions/upload-artifact@v7
+        with:
+          name: bootstrap-reports-${{ matrix.package_variant }}
+          if-no-files-found: ignore
+          path: |
+            reports/bootstrap_integrity.md
+            reports/bootstrap_gap_report.md
+            reports/beta_internal_shell_report.md
+            reports/*.json
+            reports/*.tsv
