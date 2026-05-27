@@ -65,6 +65,11 @@ final class TermuxInstaller {
 
     private static final String LOG_TAG = "TermuxInstaller";
 
+
+    private static void logPhase(String phase, String detail) {
+        Logger.logInfo(LOG_TAG, "phase=" + phase + " " + detail);
+    }
+
     /** Performs bootstrap setup if necessary. */
     static void setupBootstrapIfNeeded(final Activity activity, final Runnable whenDone) {
         String bootstrapErrorMessage;
@@ -72,6 +77,7 @@ final class TermuxInstaller {
 
         // This will also call Context.getFilesDir(), which should ensure that termux files directory
         // is created if it does not already exist
+        logPhase("files-access", "checking termux files dir accessibility");
         filesDirectoryAccessibleError = TermuxFileUtils.isTermuxFilesDirectoryAccessible(activity, true, true);
         boolean isFilesDirectoryAccessible = filesDirectoryAccessibleError == null;
 
@@ -107,6 +113,7 @@ final class TermuxInstaller {
         }
 
         // If prefix directory exists, even if its a symlink to a valid directory and symlink is not broken/dangling
+        logPhase("prefix-check", "checking existing prefix contract sh/pkg");
         if (FileUtils.directoryFileExists(TERMUX_PREFIX_DIR_PATH, true)) {
             boolean hasRequiredBootstrapBinaries =
                 FileUtils.fileExists(TERMUX_PREFIX_DIR_PATH + "/bin/sh", false) &&
@@ -173,8 +180,11 @@ final class TermuxInstaller {
                     long totalBytesExtracted = 0;
                     final String canonicalStagingPrefix = TERMUX_STAGING_PREFIX_DIR.getCanonicalPath() + "/";
 
+                    logPhase("zip-load", "loading bootstrap zip payload");
                     final byte[] zipBytes = loadZipBytes();
+                    logPhase("blake3-check", "verifying bootstrap payload integrity");
                     verifyBootstrapZipIntegrity(zipBytes);
+                    logPhase("extract", "extracting bootstrap payload to staging");
                     try (ZipInputStream zipInput = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
                         ZipEntry zipEntry;
                         while ((zipEntry = zipInput.getNextEntry()) != null) {
@@ -243,20 +253,25 @@ final class TermuxInstaller {
 
                     if (symlinks.isEmpty())
                         throw new RuntimeException("No SYMLINKS.txt encountered");
+                    logPhase("symlinks", "creating bootstrap symlinks");
                     for (Pair<String, String> symlink : symlinks) {
                         Os.symlink(symlink.first, symlink.second);
                     }
 
+                    logPhase("verify-sh", "verifying required shell");
                     if (!FileUtils.fileExists(TERMUX_STAGING_PREFIX_DIR_PATH + "/bin/sh", false)) {
                         throw new RuntimeException("Bootstrap missing required shell: " + TERMUX_STAGING_PREFIX_DIR_PATH + "/bin/sh");
                     }
+                    logPhase("verify-pkg", "verifying required package manager");
                     if (!FileUtils.fileExists(TERMUX_STAGING_PREFIX_DIR_PATH + "/bin/pkg", false)) {
                         throw new RuntimeException("Bootstrap missing required package manager: " + TERMUX_STAGING_PREFIX_DIR_PATH + "/bin/pkg");
                     }
                     verifyRuntimeBinary(TERMUX_STAGING_PREFIX_DIR_PATH + "/bin/sh", "sh");
                     verifyRuntimeBinary(TERMUX_STAGING_PREFIX_DIR_PATH + "/bin/busybox", "busybox", false);
+                    logPhase("verify-proot", "verifying optional proot runtime");
                     verifyRuntimeBinary(TERMUX_STAGING_PREFIX_DIR_PATH + "/bin/proot", "proot", false);
 
+                    logPhase("rename-prefix", "moving staging prefix into final prefix");
                     Logger.logInfo(LOG_TAG, "Moving termux prefix staging to prefix directory.");
 
                     if (!TERMUX_STAGING_PREFIX_DIR.renameTo(TERMUX_PREFIX_DIR)) {
@@ -264,10 +279,12 @@ final class TermuxInstaller {
                     }
 
                     Logger.logInfo(LOG_TAG, "Bootstrap packages installed successfully.");
+                    logPhase("baremetal-guard", "running baremetal guard selftest/validate");
                     BootstrapBaremetalGuard.selftest();
                     BootstrapBaremetalGuard.validateAfterBootstrap(TERMUX_PREFIX_DIR_PATH);
 
                     // Recreate env file since termux prefix was wiped earlier
+                    logPhase("env-write", "writing shell environment file");
                     TermuxShellEnvironment.writeEnvironmentToFile(activity);
 
                     activity.runOnUiThread(whenDone);
