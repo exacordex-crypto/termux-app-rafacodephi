@@ -43,8 +43,10 @@ Quando executado dentro de uma instalação Termux/RAFCODEΦ, o contrato exige:
 
 ```text
 $PREFIX
-$PREFIX/bin/sh
-$PREFIX/bin/pkg
+$PREFIX/bin/sh ou $PREFIX/usr/bin/sh
+$PREFIX/bin/pkg ou $PREFIX/usr/bin/pkg
+$PREFIX/bin/proot ou $PREFIX/usr/bin/proot
+$PREFIX/bin/busybox ou $PREFIX/usr/bin/busybox
 ```
 
 Se `PREFIX` ou `TERMUX_PREFIX` não estiver definido, a checagem de runtime é tratada como ambiente de build, não como falha.
@@ -102,3 +104,13 @@ Para build Gradle usando bootstrap local (sem download remoto):
 ```bash
 RAF_BOOTSTRAP_SOURCE=local ./gradlew :app:ensureBootstrapArchives --no-daemon
 ```
+
+
+## Assinatura segura
+
+Nunca versionar keystore ou segredos. Use variáveis:
+
+- `TERMUX_SIGNING_STORE_FILE`
+- `TERMUX_SIGNING_STORE_PASSWORD`
+- `TERMUX_SIGNING_KEY_ALIAS`
+- `TERMUX_SIGNING_KEY_PASSWORD`

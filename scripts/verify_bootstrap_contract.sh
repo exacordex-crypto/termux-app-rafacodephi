@@ -82,9 +82,12 @@ for name, (arch, min_api) in archives.items():
     missing = sorted(required_entries - names)
     if missing:
         raise SystemExit(f'{path}: missing entries: {missing}')
-    missing_runtime = [label for label, candidates in optional_paths.items() if not any(c in names for c in candidates)]
+    missing_runtime = []
+    for label, candidates in optional_paths.items():
+        if not any(c in names for c in candidates):
+            missing_runtime.append(f"{label} (checked: {', '.join(candidates)})")
     if missing_runtime and validation_mode != 'upstream-debug-compat':
-        raise SystemExit(f'{path}: missing runtime entries: {missing_runtime}')
+        raise SystemExit(f'{path}: runtime diagnostics failed; missing entries: {missing_runtime}')
     expected = {
         'TERMUX_PACKAGE_NAME': expected_package,
         'TERMUX_ARCH': arch,
@@ -104,9 +107,27 @@ check_runtime_prefix(){
   local p="${PREFIX:-${TERMUX_PREFIX:-}}"
   [[ -n "$p" ]] || { log "PREFIX/TERMUX_PREFIX not set; runtime check skipped (build mode)."; return 0; }
   [[ -d "$p" ]] || fail "PREFIX directory not found: $p"
-  [[ -x "$p/bin/sh" ]] || fail "Missing runtime shell: $p/bin/sh"
-  [[ -x "$p/bin/pkg" ]] || fail "Missing runtime pkg: $p/bin/pkg"
-  log "Runtime PREFIX contract OK: $p"
+  local shell_path=""
+  local pkg_path=""
+
+  if [[ -x "$p/bin/sh" ]]; then
+    shell_path="$p/bin/sh"
+  elif [[ -x "$p/usr/bin/sh" ]]; then
+    shell_path="$p/usr/bin/sh"
+  else
+    fail "Missing runtime shell (checked: $p/bin/sh, $p/usr/bin/sh)"
+  fi
+
+  if [[ -x "$p/bin/pkg" ]]; then
+    pkg_path="$p/bin/pkg"
+  elif [[ -x "$p/usr/bin/pkg" ]]; then
+    pkg_path="$p/usr/bin/pkg"
+  else
+    fail "Missing runtime pkg (checked: $p/bin/pkg, $p/usr/bin/pkg)"
+  fi
+  [[ -x "$p/bin/proot" || -x "$p/usr/bin/proot" ]] || fail "Missing runtime proot (checked: $p/bin/proot, $p/usr/bin/proot)"
+  [[ -x "$p/bin/busybox" || -x "$p/usr/bin/busybox" ]] || fail "Missing runtime busybox (checked: $p/bin/busybox, $p/usr/bin/busybox)"
+  log "Runtime PREFIX contract OK: $p (shell=$shell_path pkg=$pkg_path)"
 }
 
 check_bootstraps(){
