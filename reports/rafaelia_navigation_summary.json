@@ -1,0 +1,1735 @@
+{
+  "claim_count": 20,
+  "claims": [
+    {
+      "claim_id": "C01",
+      "evidence_file": "docs/RAFAELIA_CONCEPT_CARRY_MAP.md",
+      "executable_check": "rg -n 'ToroidalMap|T\\^7|\\[0,1\\)' docs Arme BugOrAdd",
+      "falsification": "No executable state encoder/decoder or normalization rule exists.",
+      "rollback": "Keep as DOC_ONLY and do not wire into runtime.",
+      "seed": "T^7 toroidal state",
+      "source": "Formulas 1-4,45",
+      "status": "DOC_ONLY"
+    },
+    {
+      "claim_id": "C02",
+      "evidence_file": "docs/RAFAELIA_CONCEPT_CARRY_MAP.md",
+      "executable_check": "rg -n 'alpha=0.25|\\(1-H\\).*C|entropy_milli' .",
+      "falsification": "Measured code uses a different alpha or cannot reproduce phi.",
+      "rollback": "Gate claim behind docs until deterministic test vector exists.",
+      "seed": "EMA coherence/entropy alpha=0.25",
+      "source": "Formulas 5-8",
+      "status": "NEEDS_EVIDENCE"
+    },
+    {
+      "claim_id": "C03",
+      "evidence_file": "AGENTS.md",
+      "executable_check": "rg -n 'attractor_table|period-42|BitOmega|\\|A\\| = 42' .",
+      "falsification": "Table has fewer/more than 42 entries or period test fails.",
+      "rollback": "Do not close known bug; keep doc-only until table/test fixed.",
+      "seed": "Attractor count |A|=42",
+      "source": "Formulas 9-10,23",
+      "status": "RISK_OPEN"
+    },
+    {
+      "claim_id": "C04",
+      "evidence_file": "docs/RAFAELIA_HZ_AS_MEMORY.md",
+      "executable_check": "rg -n 'cardio|FFT|S\\(omega\\)|H_cardio|Hz' docs reports scripts",
+      "falsification": "No signal artifact or correlation baseline is present.",
+      "rollback": "Label as model; do not assert biological measurement.",
+      "seed": "Signal FFT/cardio correlation",
+      "source": "Formulas 11-12,44",
+      "status": "NEEDS_BENCHMARK"
+    },
+    {
+      "claim_id": "C05",
+      "evidence_file": "docs/RAFAELIA_SEMANTIC_LAYERS.md",
+      "executable_check": "rg -n 'semantic|layer|tensor|Phi|mathcal' docs",
+      "falsification": "No layer composition implementation exists.",
+      "rollback": "Preserve as navigation semantics only.",
+      "seed": "Layer tensor/integral information",
+      "source": "Formula 13,41,50",
+      "status": "DOC_ONLY"
+    },
+    {
+      "claim_id": "C06",
+      "evidence_file": "docs/RAFAELIA_CONCEPT_CARRY_MAP.md",
+      "executable_check": "rg -n 'entropy_milli|unique.*6000|transitions.*2000|entropy' app scripts docs",
+      "falsification": "Entropy formula differs from documented test vectors.",
+      "rollback": "Keep claim out of runtime until vector set passes.",
+      "seed": "Entropy approximation",
+      "source": "Formulas 14,43",
+      "status": "NEEDS_EVIDENCE"
+    },
+    {
+      "claim_id": "C07",
+      "evidence_file": "docs/RAFAELIA_CONCEPT_CARRY_MAP.md",
+      "executable_check": "rg -n '0x100000001B3|FNV|\\^|xor|hash' app scripts rmr Arme",
+      "falsification": "Checksum differs across ABI or is described as cryptographic when not.",
+      "rollback": "Classify as integrity/checksum only.",
+      "seed": "XOR/FNV-like hash flow",
+      "source": "Formulas 15,30-32",
+      "status": "NEEDS_EVIDENCE"
+    },
+    {
+      "claim_id": "C08",
+      "evidence_file": "docs/RAFAELIA_CONCEPT_CARRY_MAP.md",
+      "executable_check": "./scripts/raf_external_integrity.sh",
+      "falsification": "Integrity script fails or required digest missing.",
+      "rollback": "Block promotion and keep previous artifact hashes.",
+      "seed": "CRC/Merkle integrity",
+      "source": "Formulas 16-17,33",
+      "status": "CODE_BACKED"
+    },
+    {
+      "claim_id": "C09",
+      "evidence_file": "docs/RAFAELIA_SQRT3_FIBONACCI_AUDIT.md",
+      "executable_check": "rg -n 'sqrt3|sqrt\\(3\\)|Fibonacci|Spiral|279' docs app scripts Arme",
+      "falsification": "Q16 conversion or recurrence test exceeds tolerance.",
+      "rollback": "Demote performance/physics claims to DOC_ONLY.",
+      "seed": "sqrt(3)/2 spiral/Fibonacci geometry",
+      "source": "Formulas 18-22,38-39",
+      "status": "NEEDS_EVIDENCE"
+    },
+    {
+      "claim_id": "C10",
+      "evidence_file": "docs/RAFAELIA_MEMORY_MODEL.md",
+      "executable_check": "rg -n 'log2|capacity|M.*N|C_geom|bits_geom' docs app scripts",
+      "falsification": "Buffer dimensions or bounds do not match capacity rule.",
+      "rollback": "Fallback to explicit bounds documentation.",
+      "seed": "Capacity/log2 geometry",
+      "source": "Formulas 24-25,46,49",
+      "status": "NEEDS_EVIDENCE"
+    },
+    {
+      "claim_id": "C11",
+      "evidence_file": "AGENTS.md",
+      "executable_check": "rg -n 'VOID|Pi|max|paradox|attractor #22|#22' .",
+      "falsification": "VOID is silently patched or attractor #22 loses flag.",
+      "rollback": "Keep #22 flagged; no silent patch.",
+      "seed": "VOID paradox / Pi max",
+      "source": "Formulas 26-27",
+      "status": "RISK_OPEN"
+    },
+    {
+      "claim_id": "C12",
+      "evidence_file": "docs/RAFAELIA_CONCEPT_CARRY_MAP.md",
+      "executable_check": "rg -n 'gcd|coprime|toroidal|stride|modulo' docs app scripts Arme",
+      "falsification": "gcd(delta, dimension) != 1 in traversal config.",
+      "rollback": "Reject traversal table and keep previous route.",
+      "seed": "Coprime toroidal traversal",
+      "source": "Formulas 28-29",
+      "status": "NEEDS_EVIDENCE"
+    },
+    {
+      "claim_id": "C13",
+      "evidence_file": "docs/RAFAELIA_CONCEPT_CARRY_MAP.md",
+      "executable_check": "rg -n 'VFC|keystream|k\\(t\\)|xor' docs app scripts",
+      "falsification": "Claim is presented as secure encryption without threat model.",
+      "rollback": "State experimental only; require security review.",
+      "seed": "VFC key stream XOR",
+      "source": "Formulas 34-35",
+      "status": "DOC_ONLY"
+    },
+    {
+      "claim_id": "C14",
+      "evidence_file": "docs/RAFAELIA_SESSION_TRUTH_NAVIGATION.md",
+      "executable_check": "rg -n 'Maxwell|Hamilton|quant|sin\\(Delta|E_link' docs",
+      "falsification": "Metaphor is promoted to measured physical claim.",
+      "rollback": "Demote to parable/model until instrumented evidence exists.",
+      "seed": "Physics/Maxwell/Hamiltonian metaphors",
+      "source": "Formulas 36-37,47-48",
+      "status": "DOC_ONLY"
+    },
+    {
+      "claim_id": "C15",
+      "evidence_file": "docs/RAFAELIA_SESSION_TRUTH_NAVIGATION.md",
+      "executable_check": "rg -n 'som|Hz|fonet|Unicode|multil|direção|direction|audio' docs",
+      "falsification": "No phonetic/acoustic dataset or reproducible transform exists.",
+      "rollback": "Keep as semantic metadata and avoid runtime claim.",
+      "seed": "Multilingual sound/Hz semantic layer",
+      "source": "Prompt linguistic/audio seed",
+      "status": "NEEDS_BENCHMARK"
+    },
+    {
+      "claim_id": "C16",
+      "evidence_file": "ANALISE_MERCADO.md",
+      "executable_check": "rg -n 'Mercado|SWOT|Projeções|Métricas|mobile|Termux' ANALISE_MERCADO.md",
+      "falsification": "No dataset split, leakage control, or metric artifact exists.",
+      "rollback": "Document as schema; no financial recommendation.",
+      "seed": "Market/data feature matrix",
+      "source": "Prompt market variables",
+      "status": "NEEDS_EVIDENCE"
+    },
+    {
+      "claim_id": "C17",
+      "evidence_file": "AGENTS.md",
+      "executable_check": "rg -n 'malloc|calloc|realloc|new |Garbage|heap' app rmr Arme scripts",
+      "falsification": "Hot path allocates heap or JNI path hides allocation.",
+      "rollback": "Move allocation to cold path or keep module out of hot path.",
+      "seed": "No-heap/no-GC hot path",
+      "source": "User architecture constraint",
+      "status": "NEEDS_EVIDENCE"
+    },
+    {
+      "claim_id": "C18",
+      "evidence_file": "docs/RAFAELIA_BRANCHLESS_MAP.md",
+      "executable_check": "rg -n 'branchless|csel|csinc|if \\(|for \\(' docs app rmr Arme",
+      "falsification": "Branch-heavy path is claimed branchless without asm/C evidence.",
+      "rollback": "Demote claim and add measured microbenchmark before restore.",
+      "seed": "Branchless/low-friction path",
+      "source": "User architecture constraint",
+      "status": "NEEDS_EVIDENCE"
+    },
+    {
+      "claim_id": "C19",
+      "evidence_file": "docs/ENGINEERING_SYSTEM_RUNBOOK.md",
+      "executable_check": "rg -n 'failsafe|failover|rollback|watchdog|smoke_release_gate' docs scripts reports",
+      "falsification": "No command or artifact demonstrates rollback/guard.",
+      "rollback": "Keep as runbook requirement; do not call enterprise-ready.",
+      "seed": "Failsafe/failover/rollback/watchdog",
+      "source": "User operational constraint",
+      "status": "NEEDS_EVIDENCE"
+    },
+    {
+      "claim_id": "C20",
+      "evidence_file": "docs/RAFAELIA_5_LEVEL_DOCUMENTATION_NAVIGATION.md",
+      "executable_check": "python3 scripts/generate_rafaelia_navigation.py --max-depth 5 --check",
+      "falsification": "Generated docs differ from checked-in docs.",
+      "rollback": "Regenerate and recommit deterministic artifacts.",
+      "seed": "Documentation 5-level navigation",
+      "source": "User catalog request",
+      "status": "CODE_BACKED"
+    }
+  ],
+  "claims_sha256": "d8aa3de610b0bf9a748eb7d315a25eee23fecf7a738b57d95d6983ff24b832d7",
+  "document_count": 254,
+  "documents": [
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "AGENTS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "AGENTS2.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "mercado/dados",
+      "path": "ANALISE_MERCADO.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "segurança/auditoria",
+      "path": "ANDROID15_AUDIT_REPORT.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 1,
+      "domain": "android/bootstrap",
+      "path": "ANDROID15_COMPATIBILITY_REPORT.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "android/bootstrap",
+      "path": "ANDROID15_RELATORIO_COMPATIBILIDADE.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "android/bootstrap",
+      "path": "ANDROID16_PAGE_SIZE_FIX.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "ARQUIVOS_SOLTOS_INVENTARIO.md",
+      "status": "LOOSE_OR_EXPERIMENTAL"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "ASSINATURA_AUTORIA.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "segurança/auditoria",
+      "path": "AUDITORIA.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 1,
+      "domain": "segurança/auditoria",
+      "path": "AUDITORIA_TAREFAS.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 3,
+      "domain": "low-level/arm",
+      "path": "Arme/Add/Devem.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "low-level/arm",
+      "path": "Arme/Add/RAFAELIA_ARKRAF_MASTER.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "low-level/arm",
+      "path": "Arme/Add/RAFAELIA_CODEX_POLIMATA.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "low-level/arm",
+      "path": "Arme/Add/RAFAELIA_MASTER_DOC.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "low-level/arm",
+      "path": "Arme/Add/RAFAELIA_MATH_FORMULAS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "low-level/arm",
+      "path": "Arme/Add/RAF_STATECOMP.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "low-level/arm",
+      "path": "Arme/Add/README.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "Arme/RAFAELIA_ARKRAF_MASTER.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "Arme/RAFAELIA_CODEX_POLIMATA.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "Arme/RAFAELIA_MASTER_DOC.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "Arme/RAF_GENESIS.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "Arme/RAF_PMU_LIVE.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "Arme/RAF_STATECOMP.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "Arme/conceitos_mvp.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "Arme/documentacao_tecnica_algoritmos.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "Arme/engenharia_estado_unificado.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "Arme/estado_aprendizado_fronteira.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "Arme/estado_modelo_temporal.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "Arme/estado_nucleo.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "Arme/pomeg.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "Arme/rafaelia_bare_hardware_v2.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "Arme/rafaelia_master.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "Arme/rafaelia_sementes_v1.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "Arme/readme_profissional.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "low-level/arm",
+      "path": "Asm2.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "testes/benchmark",
+      "path": "BENCHMARKS_COMPARISON.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "BOOSTERS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "documentação/navegação",
+      "path": "BOOSTERS_DOCUMENTACAO.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "android/bootstrap",
+      "path": "BOOTSTRAP_LOWLEVEL_RAFAELIA.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "BugOrAdd/DOSSIÊ_RAFAELIA_VECTRA_C_ASM.txt",
+      "status": "LOOSE_OR_EXPERIMENTAL"
+    },
+    {
+      "depth": 2,
+      "domain": "matemática/vectra",
+      "path": "BugOrAdd/RAFAELIA_MATH_FORMULAS.md",
+      "status": "LOOSE_OR_EXPERIMENTAL"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "BugOrAdd/README.md",
+      "status": "LOOSE_OR_EXPERIMENTAL"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "BugOrAdd/Readme.md",
+      "status": "LOOSE_OR_EXPERIMENTAL"
+    },
+    {
+      "depth": 2,
+      "domain": "conceito/manifesto/outros",
+      "path": "BugOrAdd/dia2.md",
+      "status": "LOOSE_OR_EXPERIMENTAL"
+    },
+    {
+      "depth": 2,
+      "domain": "conceito/manifesto/outros",
+      "path": "BugOrAdd/exec_scan_results.txt",
+      "status": "LOOSE_OR_EXPERIMENTAL"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "CHANGELOG.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "COERENCIA_DE_ESTADOS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "COMP/AUDITORIA BRECHA E COMPILAR PARA ASM.MD",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "COMP/BOOTSTRAP_LOWLEVEL_RAFAELIA.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "conceito/manifesto/outros",
+      "path": "COMP/HISTORICAL_NOTICE.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "conceito/manifesto/outros",
+      "path": "COMP/deep-research-report.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "conceito/manifesto/outros",
+      "path": "COMP/doisrafaekl.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "conceito/manifesto/outros",
+      "path": "COMP/rafael.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "CONTRIBUTORS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "DIFERENCAS_FORK.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "DISSERTACAO_TECNOLOGICA.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "documentação/navegação",
+      "path": "DOCS_L2_TREE.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "documentação/navegação",
+      "path": "DOCUMENTACAO.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "android/bootstrap",
+      "path": "FIX_REWRITE_BOOTSTRAPS_REPORT.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "FRAMEWORK_MULTI_IA_SPEC_V1.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "Ger afo.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "low-level/arm",
+      "path": "IMPLEMENTACAO_BAREMETAL.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "IMPLEMENTATION_COMPLETE.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "documentação/navegação",
+      "path": "INDICE_DOCUMENTACAO.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "low-level/arm",
+      "path": "INSTALL_ARM32.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "INVENTARIO.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "INVENTARIO_CODIGO_FONTE.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "documentação/navegação",
+      "path": "LEIA-ME-DOCUMENTACAO.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "LICENSE.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "MANIFESTO_PHD_OITO_AREAS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "MANIFESTO_RAFAELIA.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "PERFORMANCE_GLOSSARY_PRIORITIZED.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "PIPELINE_ORQUESTRADO.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "Primeiro_beta.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "segurança/auditoria",
+      "path": "RAFAELIA_AUDIT_CURRENT_REPO.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "RAFAELIA_CROSS_REPO_PLAN.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "documentação/navegação",
+      "path": "RAFAELIA_IMPLEMENTATION_SUMMARY.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "RAFAELIA_METHODOLOGY.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "RAFAELIA_MODULE_ORGANIZATION.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "segurança/auditoria",
+      "path": "RAFAELIA_TERMUX_AGENT_AUDIT.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 1,
+      "domain": "android/bootstrap",
+      "path": "RAFCODEPHI_BOOTSTRAP_CONTRACT.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "RAFCODEPHI_V3_NOTES.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "documentação/navegação",
+      "path": "README.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "documentação/navegação",
+      "path": "README_BETA.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "REPORT.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "RESUMO_FINAL.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "Ra tarefa.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "Ret.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "segurança/auditoria",
+      "path": "SECURITY.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "segurança/auditoria",
+      "path": "SECURITY_SUMMARY.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "documentação/navegação",
+      "path": "SUMMARY.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "SUPRA_LEGAL_FULL_FOUNDATION.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "TROUBLESHOOTING.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "Umarte.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "testes/benchmark",
+      "path": "VALIDATION_COMMANDS.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 1,
+      "domain": "testes/benchmark",
+      "path": "VALIDATION_COMMANDS_RMRV2.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "WIP_INTEGRACAO_MVPS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "androidx_rmr/termux-api-README.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "androidx_rmr/termux-boot-README.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "asm/RAFAELIA_ISA_BITRAF.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "bootstrap_rafaelia/README.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "docs/ARME_WORKFLOW_CONTRACT.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "docs/AUDIT_CLAIMS_POLICY.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/BETA_ARTIFACT_HYGIENE.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/BETA_BLOCKERS_MATRIX.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "docs/BETA_BOOTSTRAP_BAREMETAL_GUARD.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "docs/BETA_BOOTSTRAP_BAREMETAL_STATUS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "docs/BETA_BOOTSTRAP_STATUS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "docs/BETA_BOOTSTRAP_VALIDATION.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/BETA_BUILD_FLAGS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/BETA_BUILD_REPORT.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/BETA_CI_ARTIFACTS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "docs/BETA_FAILURE_STABILITY_AUDIT.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/BETA_INTERNAL_SHELL_START.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/BETA_KNOWN_LIMITATIONS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "docs/BETA_LOWLEVEL_HARDWARE_AUDIT.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "docs/BETA_PROCESS_CLEANUP_AUDIT.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/BETA_READINESS_REPORT.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/BETA_RELEASE_NOTES.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/BETA_REPO_MAP.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "docs/BETA_RMR_LOWLEVEL_GATE.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "testes/benchmark",
+      "path": "docs/BETA_RUNTIME_TEST_PLAN.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "docs/BETA_SECURITY_CHECK.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "docs/BETA_TERMINAL_LIFECYCLE_AUDIT.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "testes/benchmark",
+      "path": "docs/BETA_TEST_PLAN.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "docs/BOOTSTRAP_LOWLEVEL_RAFAELIA_AUDIT.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "docs/BOOTSTRAP_LOWLEVEL_RAFAELIA_STATUS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "docs/BOOTSTRAP_RAFAELIA_TERMUX_INTEGRATION_PLAN.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "docs/BOOTSTRAP_REWRITE.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/BUILD_APK_MATRIX.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "docs/BUILD_BOOTSTRAP_HARDWARE_MODEL.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/CI_WORKFLOW_OWNERSHIP.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/DEPENDENCIAS_TOTAIS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/ENGINEERING_SYSTEM_RUNBOOK.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/EXTERNAL_INTEGRATION_MAP.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/IMPLEMENTATION_SUMMARY_RAFAELIA_IMPROVEMENTS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/INVENTORY_RAFAELIA.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/ISO_COMPLIANCE.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "docs/LOWLEVEL_MIGRATION.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "docs/LOWLEVEL_SUMMARY.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/MARKDOWN_MAPA_ABSOLUTO.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/MAYA_RAFCODEPHI_LEITURA_CORRETA.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "docs/MUDANCAS_ANDROID15.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/PERMISSION_TRACKING_MITIGATION_REPORT.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/PSS3_FAILURE_STABILITY.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/PSS3_FAILURE_TRACE_FORMAT.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_10X10X10_BIT_MATRIX.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_5_LEVEL_DOCUMENTATION_NAVIGATION.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "testes/benchmark",
+      "path": "docs/RAFAELIA_BENCHMARK_TAXONOMY.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_BIT_CHAIN.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_BRANCHLESS_MAP.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_CLAIM_EXECUTION_MATRIX.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_CODE_DOC_SYNC.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_CODE_DOC_SYNC_REPORT.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_CONCEPT_CARRY_MAP.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "docs/RAFAELIA_CORE_AUDIT.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_CROSS_ARCH_CORRECTION_MATRIX.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_DUAL_SOURCE_INVENTORY.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_GAP_MATRIX.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "docs/RAFAELIA_GEOMETRIC_ALGEBRA_AUDIT.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_GIT_TRUTH_CONVERGENCE_REPORT.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_HZ_AS_MEMORY.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_IMPLEMENTATION_REPORT.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_LOOSE_FILES_MAP.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "docs/RAFAELIA_LOWLEVEL_ASM_INDEX.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "docs/RAFAELIA_LOWLEVEL_TOTAL_ANALYSIS_REPORT.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_MEMORY_MODEL.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_MISSHIT_CACHE.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_NOISE_ERROR_MITIGATION.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_PATH_GRAPH.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_PRIORITY_MATRIX.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_PROTOCOL_IMPROVEMENTS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_REFUTATION_REVIEW.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "testes/benchmark",
+      "path": "docs/RAFAELIA_REQUIRED_TESTS_FOR_CLAIMS.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_SEED_ALIGNMENT.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_SEMANTIC_LAYERS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_SESSION_TRUTH_NAVIGATION.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "docs/RAFAELIA_SINE_LIMIT_MIRROR_AUDIT.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_SOURCE_STATUS_MAP.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "docs/RAFAELIA_SQRT3_FIBONACCI_AUDIT.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_STRONG_CLAIMS_REFUTATION.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_THIRD_RESULT_CONVERGENCE.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "testes/benchmark",
+      "path": "docs/RAFAELIA_TOP42_BENCHMARKS.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_TOTAL_MATRIX.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RAFAELIA_VCPU_CLOCK.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "matemática/vectra",
+      "path": "docs/RAFAELIA_VECTRAS_BIT_CONVERGENCE.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "docs/RAFCODEPHI_ANDROID15_COMPATIBILITY.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "docs/RAFCODEPHI_MATH_RUNTIME_AUDIT.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RELEASE_NOTES_RAFAELIA.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/REVISAO_COMPLETA_MARKDOWN.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "docs/RMR_ASM_AUDIT.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RMR_COLDPATH_BOUNDARIES.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "docs/RMR_LOWLEVEL_PURITY_AUDIT.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/RMR_PURE_CORE_REPORT.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/ROADMAP_RAFAELIA.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/STATUS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/SYMBOL_ENCODING_POLICY.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/TAIL_SHADOW_RESERVOIR_MODEL.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "testes/benchmark",
+      "path": "docs/TESTE_DE_MESA_METHODOLOGY.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/TOP10_CODE_DOC_GAPS_2026-05.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "testes/benchmark",
+      "path": "docs/VECTRA_GRADE_BENCHMARKS.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "low-level/arm",
+      "path": "docs/WORKFLOW_ARM32_MULTIPAGE.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "docs/android-target-migration.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "docs/bootstrap-compatibility.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "docs/bootstrap-failure-log-examples.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "documentação/navegação",
+      "path": "docs/en/index.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "docs/inventario.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "documentação/navegação",
+      "path": "docs/rafaelia/ANALISE_IMAGEM_E_PROCEDIMENTO.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "segurança/auditoria",
+      "path": "docs/rafaelia/AUDITORIA.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 3,
+      "domain": "low-level/arm",
+      "path": "docs/rafaelia/BITRAF_LOWLEVEL_CORE.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "documentação/navegação",
+      "path": "docs/rafaelia/CONSTANTS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "documentação/navegação",
+      "path": "docs/rafaelia/DOCUMENTACAO_COMPLETA_RAFAELIA.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "documentação/navegação",
+      "path": "docs/rafaelia/EXECUCAO_PROMPTS_STATUS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "matemática/vectra",
+      "path": "docs/rafaelia/FORMULAS_RAFAELIA_INDEX.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "documentação/navegação",
+      "path": "docs/rafaelia/README.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "android/bootstrap",
+      "path": "docs/rafaelia/VECTRAS_TERMUX_EXECUTION_BRIDGE.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "external/README.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 5,
+      "domain": "android/bootstrap",
+      "path": "fastlane/metadata/android/en-US/full_description.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 5,
+      "domain": "android/bootstrap",
+      "path": "fastlane/metadata/android/en-US/short_description.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "mvp/AUDITORIA.md",
+      "status": "LOOSE_OR_EXPERIMENTAL"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "mvp/README.md",
+      "status": "LOOSE_OR_EXPERIMENTAL"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "promptcodex.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "qemu_rafaelia/termux-packages-README.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "raf_bootstrap_linear_flat_v2/README_LINEAR_V2.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "android/bootstrap",
+      "path": "raf_bootstrap_linear_flat_v2/reports/verify_linear.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "segurança/auditoria",
+      "path": "rafaelia/old/AUDITORIA.md",
+      "status": "LOOSE_OR_EXPERIMENTAL"
+    },
+    {
+      "depth": 3,
+      "domain": "documentação/navegação",
+      "path": "rafaelia/old/README.md",
+      "status": "LOOSE_OR_EXPERIMENTAL"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "reports/TERMUX_RAFACODEPHI_STARTUP_FIX_REPORT.md",
+      "status": "ARTIFACT"
+    },
+    {
+      "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "reports/audit_claims_validation.md",
+      "status": "ARTIFACT"
+    },
+    {
+      "depth": 2,
+      "domain": "conceito/manifesto/outros",
+      "path": "reports/beta_internal_shell_report.md",
+      "status": "ARTIFACT"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "reports/bootstrap_gap_report.md",
+      "status": "ARTIFACT"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "reports/bootstrap_integrity.md",
+      "status": "ARTIFACT"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "reports/debug_bootstrap_test.md",
+      "status": "ARTIFACT"
+    },
+    {
+      "depth": 2,
+      "domain": "conceito/manifesto/outros",
+      "path": "reports/external_integration_status.md",
+      "status": "ARTIFACT"
+    },
+    {
+      "depth": 2,
+      "domain": "conceito/manifesto/outros",
+      "path": "reports/rafaelia_claim_execution_results.md",
+      "status": "ARTIFACT"
+    },
+    {
+      "depth": 2,
+      "domain": "testes/benchmark",
+      "path": "reports/vectra_grade_benchmarks.md",
+      "status": "ARTIFACT"
+    },
+    {
+      "depth": 2,
+      "domain": "matemática/vectra",
+      "path": "reports/vectra_integration_report.md",
+      "status": "ARTIFACT"
+    },
+    {
+      "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "rmr/AUDITORIA.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
+      "domain": "conceito/manifesto/outros",
+      "path": "rmr/RAFAELIA_SEMENTES.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "rmr/README.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "matemática/vectra",
+      "path": "rmr/Rrr/RAFAELIA_MATH_FORMULAS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "documentação/navegação",
+      "path": "rmr/Rrr/README.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "documentação/navegação",
+      "path": "rmr/Rrr/Readme.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 4,
+      "domain": "conceito/manifesto/outros",
+      "path": "rmr/Rrr/generated/KNOWLEDGE_FLOW_MATRIX.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 4,
+      "domain": "conceito/manifesto/outros",
+      "path": "rmr/Rrr/generated/RAFAELIA_DELIVERY.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 4,
+      "domain": "documentação/navegação",
+      "path": "rmr/Rrr/generated/README_ALL_ARTIFACTS.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 4,
+      "domain": "conceito/manifesto/outros",
+      "path": "rmr/Rrr/generated/rafaelia_isa_spec.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "documentação/navegação",
+      "path": "rmr/docs/LICENCIAMENTO_RAFAELIA.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 3,
+      "domain": "documentação/navegação",
+      "path": "rmr/docs/NUCLEO_AUTORAL_RAFAELIA.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "documentação/navegação",
+      "path": "scripts/README_RAFAELIA_PROTOCOL.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 2,
+      "domain": "android/bootstrap",
+      "path": "termux-shared/LICENSE.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "conceito/manifesto/outros",
+      "path": "top42_env.txt",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 1,
+      "domain": "documentação/navegação",
+      "path": "top42_readme.md",
+      "status": "DOC_INDEXED"
+    }
+  ],
+  "documents_sha256": "77109b87f1c454bbcc11b043f3c944edaacc1c8f806430f76bee5d0239382d81",
+  "max_depth": 5
+}

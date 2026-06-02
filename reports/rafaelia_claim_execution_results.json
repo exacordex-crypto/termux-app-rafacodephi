@@ -1,0 +1,182 @@
+[
+  {
+    "claim_id": "C01",
+    "command": "rg -n 'ToroidalMap|T\\^7|\\[0,1\\)' docs Arme BugOrAdd",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "DOC_ONLY",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "BugOrAdd/rafaelia_master.sh:128:B1: Torus T^7 · Arena · CRC32C · NEON mat4x4 · 42 attractors BugOrAdd/rafaelia_master.sh:143:T^7 = (R/Z)^7 BugOrAdd/rafaelia_master.sh:144:s = (u,v,ψ,χ,ρ,δ,σ) ∈ [0,1)^7 BugOrAdd/rafaelia_master.sh:216: * G = (V, E), |V| = 42 nós dispostos no toro T^7 BugOrAdd/vectras_bbs.c:201: \"Topol..."
+  },
+  {
+    "claim_id": "C02",
+    "command": "rg -n 'alpha=0.25|\\(1-H\\).*C|entropy_milli' .",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "NEEDS_EVIDENCE",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "./docs/RAFCODEPHI_MATH_RUNTIME_AUDIT.md:26:3. **Constantes geométricas Q16 / frequência como memória operacional**: uso de Q16.16 em EMA e `phi=(1-H)*C`; clock materializa memória temporal (`period_ns`, `actual_delta_ns`, `jitter_ns`, `missed_ticks`, `total_ticks`, `actual_hz_q16`). **Status: PROVADO_NO_CÓDIGO**. ./..."
+  },
+  {
+    "claim_id": "C03",
+    "command": "rg -n 'attractor_table|period-42|BitOmega|\\|A\\| = 42' .",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "RISK_OPEN",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "./AGENTS.md:10:validate: bitomega.log → period-42 confirmed ./AGENTS.md:29:- attractor_table: 42 entries required, none missing ./AGENTS.md:32:1. attractor_table incomplete (40 of 42 missing) ./AGENTS.md:45:|A| = 42 — attractor count ./AGENTS.md:46:period(BitOmega) = 42 — confirmed, do not break ./docs/RAFAELIA_GIT_..."
+  },
+  {
+    "claim_id": "C04",
+    "command": "rg -n 'cardio|FFT|S\\(omega\\)|H_cardio|Hz' docs reports scripts",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "NEEDS_BENCHMARK",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "reports/rafaelia_claim_execution_matrix.csv:5:C04,Signal FFT/cardio correlation,\"Formulas 11-12,44\",NEEDS_BENCHMARK,docs/RAFAELIA_HZ_AS_MEMORY.md,rg -n 'cardio|FFT|S\\(omega\\)|H_cardio|Hz' docs reports scripts,No signal artifact or correlation baseline is present.,Label as model; do not assert biological measurement...."
+  },
+  {
+    "claim_id": "C05",
+    "command": "rg -n 'semantic|layer|tensor|Phi|mathcal' docs",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "DOC_ONLY",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "docs/RAFAELIA_GAP_MATRIX.md:31:- memory layers docs/RAFAELIA_LOOSE_FILES_MAP.md:7:| rmr/Rrr/rafaelia_core.c | core legado arm32 | SOLTO/EXPERIMENTAL | parcial | não | alto | contém vcpu/hz/layers | reimplementar modular | docs/PSS3_FAILURE_TRACE_FORMAT.md:8:`timestamp,run_id,domain,layer,file,function,line,signature..."
+  },
+  {
+    "claim_id": "C06",
+    "command": "rg -n 'entropy_milli|unique.*6000|transitions.*2000|entropy' app scripts docs",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "NEEDS_EVIDENCE",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "docs/RAFAELIA_CORE_AUDIT.md:9:- CRC32C, coherence, entropy, phase, step ativos. scripts/generate_rafaelia_navigation.py:110: (\"C02\", \"EMA coherence/entropy alpha=0.25\", \"Formulas 5-8\", \"NEEDS_EVIDENCE\", \"docs/RAFAELIA_CONCEPT_CARRY_MAP.md\", \"rg -n 'alpha=0.25|\\\\(1-H\\\\).*C|entropy_milli' .\", \"Measured code uses a dif..."
+  },
+  {
+    "claim_id": "C07",
+    "command": "rg -n '0x100000001B3|FNV|\\^|xor|hash' app scripts rmr Arme",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "NEEDS_EVIDENCE",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "rmr/docs/NUCLEO_AUTORAL_RAFAELIA.md:7:2. **Semântica**: mapeamento toroidal `T^7` para estados linguísticos multi-idioma. rmr/docs/NUCLEO_AUTORAL_RAFAELIA.md:8:3. **Integridade**: hash/CRC/Merkle para rastreabilidade criptográfica de execução e dados. rmr/docs/NUCLEO_AUTORAL_RAFAELIA.md:11:- Estado toroidal: `s=(u,v..."
+  },
+  {
+    "claim_id": "C08",
+    "command": "./scripts/raf_external_integrity.sh",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "CODE_BACKED",
+    "stderr_excerpt": "WARNING: input bootstrap not found: app/src/main/cpp/bootstrap-arm.zip WARNING: python blake3 module not available",
+    "stdout_excerpt": "OK: integrity reports generated in reports"
+  },
+  {
+    "claim_id": "C09",
+    "command": "rg -n 'sqrt3|sqrt\\(3\\)|Fibonacci|Spiral|279' docs app scripts Arme",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "NEEDS_EVIDENCE",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "scripts/beta_selftest.py:35: \"sqrt(3)/2\", scripts/beta_selftest.py:36: \"Fibonacci\", Arme/RAFAELIA_CODEX_POLIMATA.txt:154: F* = 23.158 (ponto fixo da sequência Rafael-Fibonacci — NOVO) Arme/RAFAELIA_CODEX_POLIMATA.txt:674: F* = 23.158 do ponto fixo Fibonacci-Rafael aparece naturalmente em GEOLM: Arme/RAFAELIA_CODEX_P..."
+  },
+  {
+    "claim_id": "C10",
+    "command": "rg -n 'log2|capacity|M.*N|C_geom|bits_geom' docs app scripts",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "NEEDS_EVIDENCE",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "scripts/rewrite_bootstrap.py:173: f'TERMUX_PACKAGE_NAME={args.package_name}\\nTERMUX_ARCH={args.arch}\\nTERMUX_ABI={args.abi}\\nTERMUX_PACKAGE_VARIANT={args.variant}\\nTERMUX_PREFIX={args.prefix}\\nTERMUX_HOME={args.home}\\nTERMUX_PAGE_SIZE={args.page_size}\\nBOOTSTRAP_KIND=rewritten\\nBOOTSTRAP_RUNTIME_READY=1\\nBOOTSTRAP_R..."
+  },
+  {
+    "claim_id": "C11",
+    "command": "rg -n 'VOID|Pi|max|paradox|attractor #22|#22' .",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "RISK_OPEN",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "./LEIA-ME-DOCUMENTACAO.md:41:#### [PIPELINE_ORQUESTRADO.md](PIPELINE_ORQUESTRADO.md) - 🔄 Pipeline CI/CD ⭐ NOVO ./LEIA-ME-DOCUMENTACAO.md:42:**O que contém**: Pipeline integrado seguindo ciclo ψχρΔΣΩ ./ANDROID16_PAGE_SIZE_FIX.md:7:**Solution:** Added `-Wl,-z,max-page-size=16384` linker flag to all native libraries to..."
+  },
+  {
+    "claim_id": "C12",
+    "command": "rg -n 'gcd|coprime|toroidal|stride|modulo' docs app scripts Arme",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "NEEDS_EVIDENCE",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "Arme/RAFAELIA_CODEX_POLIMATA.txt:156: n_crítico para língua: dimensão toroidal que cabe uma frase Arme/RAFAELIA_CODEX_POLIMATA.txt:788: uint32_t s[G_DIM]; /* estado toroidal Q16.16 */ Arme/RAFAELIA_CODEX_POLIMATA.txt:1091: Combinação SPIRAL_Q16=56755 + PERIOD=42 + stride_coprimo=7: Arme/RAF_STATECOMP.txt:26:# state_..."
+  },
+  {
+    "claim_id": "C13",
+    "command": "rg -n 'VFC|keystream|k\\(t\\)|xor' docs app scripts",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "DOC_ONLY",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "scripts/calc_mvp_authorship_checksum.py:51:def xor32_groups_of_4(byte_values: list[int]) -> int: scripts/calc_mvp_authorship_checksum.py:66: checksum = xor32_groups_of_4(payload) scripts/rafaelia_protocol_improved.sh:659:static uint32_t xorshift_cache[256]; scripts/rafaelia_protocol_improved.sh:662:void init_xorshif..."
+  },
+  {
+    "claim_id": "C14",
+    "command": "rg -n 'Maxwell|Hamilton|quant|sin\\(Delta|E_link' docs",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "DOC_ONLY",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "docs/VECTRA_GRADE_BENCHMARKS.md:15:- O JNI adiciona quanto overhead? docs/RAFAELIA_CLAIM_EXECUTION_MATRIX.md:32:| C14 | Physics/Maxwell/Hamiltonian metaphors | Formulas 36-37,47-48 | DOC_ONLY | `docs/RAFAELIA_SESSION_TRUTH_NAVIGATION.md` | `rg -n 'Maxwell|Hamilton|quant|sin\\(Delta|E_link' docs` | Metaphor is promote..."
+  },
+  {
+    "claim_id": "C15",
+    "command": "rg -n 'som|Hz|fonet|Unicode|multil|direção|direction|audio' docs",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "NEEDS_BENCHMARK",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "docs/RAFAELIA_CORE_AUDIT.md:14:- Hz de motor é lógico e não Hz físico de CPU. docs/RAFAELIA_GAP_MATRIX.md:15:| Medições multilíngues (entropia 10 línguas) | **Ausente** | não encontrado | Definir dataset + pipeline de coleta | docs/TAIL_SHADOW_RESERVOIR_MODEL.md:49:- `TermuxInstaller`: somente promove para prefix ap..."
+  },
+  {
+    "claim_id": "C16",
+    "command": "rg -n 'Mercado|SWOT|Projeções|Métricas|mobile|Termux' ANALISE_MERCADO.md",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "NEEDS_EVIDENCE",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "1:# Análise de Mercado: Termux RAFCODEΦ 4:**Documento**: Análise de Mercado 5:**Projeto**: Termux RAFCODEΦ 14:O **Termux RAFCODEΦ** se posiciona como uma solução premium de terminal Android, oferecendo desempenho superior, otimizações de hardware e compatibilidade ampla com Android 7-15. O mercado-alvo inclui desenv..."
+  },
+  {
+    "claim_id": "C17",
+    "command": "rg -n 'malloc|calloc|realloc|new |Garbage|heap' app rmr Arme scripts",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "NEEDS_EVIDENCE",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "Arme/RAFAELIA_CODEX_POLIMATA.txt:46: [!] Usa malloc() em arena_create — problema em ARM32 embedded Arme/RAFAELIA_CODEX_POLIMATA.txt:54:CAMINHO: geolm_full.c → [refactor arena] → [remove malloc] → [Q16.16 completo] Arme/RAFAELIA_CODEX_POLIMATA.txt:69: [✓] Zero malloc declarado — usa gctx_t estático Arme/RAFAELIA_CODE..."
+  },
+  {
+    "claim_id": "C18",
+    "command": "rg -n 'branchless|csel|csinc|if \\(|for \\(' docs app rmr Arme",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "NEEDS_EVIDENCE",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "Arme/RAFAELIA_ENTERPRISE_BENCH_v3 (1).c:38: if (neg) x -= 205887u; Arme/RAFAELIA_ENTERPRISE_BENCH_v3 (1).c:45: if (r < 0) r = 0; Arme/RAFAELIA_ENTERPRISE_BENCH_v3 (1).c:46: if (r > 65535) r = 65535; Arme/RAFAELIA_ENTERPRISE_BENCH_v3 (1).c:55: for (u32 i = 0; i < 256; i++) { Arme/RAFAELIA_ENTERPRISE_BENCH_v3 (1).c:57..."
+  },
+  {
+    "claim_id": "C19",
+    "command": "rg -n 'failsafe|failover|rollback|watchdog|smoke_release_gate' docs scripts reports",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "NEEDS_EVIDENCE",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "reports/rafaelia_claim_execution_matrix.csv:1:claim_id,seed,source,status,evidence_file,executable_check,falsification,rollback reports/rafaelia_claim_execution_matrix.csv:20:C19,Failsafe/failover/rollback/watchdog,User operational constraint,NEEDS_EVIDENCE,docs/ENGINEERING_SYSTEM_RUNBOOK.md,rg -n 'failsafe|failover..."
+  },
+  {
+    "claim_id": "C20",
+    "command": "python3 scripts/generate_rafaelia_navigation.py --max-depth 5 --check",
+    "exit_code": 0,
+    "outcome": "PASS",
+    "status": "CODE_BACKED",
+    "stderr_excerpt": "",
+    "stdout_excerpt": "RAFAELIA navigation artifacts generated"
+  }
+]
