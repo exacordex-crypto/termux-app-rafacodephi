@@ -27,6 +27,13 @@ This fork complies with the GPLv3 license of the original Termux project. All mo
 [![Join the chat at https://gitter.im/termux/termux](https://badges.gitter.im/termux/termux.svg)](https://gitter.im/termux/termux)
 [![Join the Termux discord server](https://img.shields.io/discord/641256914684084234.svg?label=&logo=discord&logoColor=ffffff&color=5865F2)](https://discord.gg/HXpF69X)
 [![Termux library releases at Jitpack](https://jitpack.io/v/termux/termux-app.svg)](https://jitpack.io/#termux/termux-app)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Platform](https://img.shields.io/badge/platform-Android%207%2B-brightgreen)](https://developer.android.com)
+[![Architecture](https://img.shields.io/badge/arch-ARM32%20%7C%20ARM64%20%7C%20x86__64-orange)](rmr/Rrr/Android_nomalloc.mk)
+[![C11 nomalloc](https://img.shields.io/badge/C-C11%20zero--malloc-blueviolet)](rmr/Rrr/cti_raw_reader.h)
+[![CTI BITSTACK](https://img.shields.io/badge/RAFAELIA-CTI%20BITSTACK-critical)](rmr/Rrr/cti_raw_reader.c)
+[![ZIPRAF](https://img.shields.io/badge/RAFAELIA-ZIPRAF%20Manifesto-critical)](rmr/Rrr/zipraf_index.c)
+[![CRC32C](https://img.shields.io/badge/integrity-CRC32C%20inline-lightgrey)](rmr/Rrr/)
 
 ## About Termux
 
@@ -110,6 +117,144 @@ Without this fix, apps crash with SIGSEGV on startup. **This fork includes the c
 - ✅ **Low-level utilities**: Deterministic helpers implemented in C with ASM-backed primitives where possible (RMR module)
 - ✅ **No legacy abstractions**: JNI only as a thin bridge to native primitives
 - ✅ **Termux packages alignment**: The package ecosystem remains defined by [termux/termux-packages](https://github.com/termux/termux-packages)
+
+---
+
+### CTI BITSTACK — Deterministic Raw File Scanner
+
+> **Module**: `rmr/Rrr/cti_raw_reader.h` + `cti_raw_reader.c`  
+> **Status**: ✅ Production — merged in PR #190
+
+CTI BITSTACK scans any file (RAW, JPEG, GIF, PNG, ZIP) at **byte-block granularity** (4 096 bytes/block) and builds a deterministic index of per-block metrics. It operates entirely without heap allocation, using only `write(1,…)` for output and an inline CRC32C table.
+
+**Per-block index entry** (`CtiEntry`, 28 bytes packed):
+
+| Field | Type | Description |
+|---|---|---|
+| `idx` | `uint32_t` | Physical block index |
+| `size` | `uint32_t` | Bytes read from this block |
+| `ts` | `uint64_t` | Logical scan counter (monotonic) |
+| `fid_crc32` | `uint32_t` | CRC32C (Castagnoli) of block bytes |
+| `entropy` | `uint32_t` | Shannon entropy × 1000 (0 = flat; 8000 = max random) |
+| `flags` | `uint8_t` | `CTI_FMT_*` detected at file header |
+| `xbad` | `uint8_t` | Saturated count of `0x00`/`0xFF` run events |
+| `miss_score` | `int16_t` | DELTA_MISS signed deviation from expected chain-CRC |
+
+**5 Scan Modes** (`CtiMode` enum):
+
+| Mode | Constant | Traversal |
+|---|---|---|
+| Sequential | `CTI_SEQ` | Block 0, 1, 2, … N-1 |
+| Spiral | `CTI_SPIRAL` | 2-D counter-clockwise spiral from grid centre |
+| Toroidal | `CTI_TOROID` | Coprime-stride walk — `gcd(stride, N) = 1` guarantees full coverage |
+| Random mapping | `CTI_RANDOM_PERM` | xorshift64 keyed by `seed` — different order on each seed |
+| Delta-miss | `CTI_DELTA_MISS` | SEQ + live miss-score = `f(prev_crc, position, seed)` |
+
+**Format detection** (from first 8 bytes):
+
+| Format | Magic |
+|---|---|
+| JPEG | `FF D8` |
+| PNG | `89 50 4E 47` (4 bytes) |
+| GIF | `GIF87a` or `GIF89a` (6 bytes) |
+| ZIP | `PK 03 04` (local-file-header signature, 4 bytes) |
+| RAW | fallback |
+
+**Public API**:
+```c
+int      cti_scan_fd(CtiScanner *sc, int fd, CtiMode mode, uint32_t seed);
+void     cti_print_report(const CtiScanner *sc);
+uint8_t  cti_detect_fmt(const uint8_t *hdr, uint32_t hdr_len);
+uint32_t cti_entropy(const uint8_t *buf, uint32_t len);
+```
+
+**Build**:
+```bash
+# Standalone scanner (Linux / Android via NDK):
+gcc -std=c11 -O2 -DCTI_BUILD_MAIN -o cti_scan rmr/Rrr/cti_raw_reader.c
+./cti_scan /path/to/file [mode 0-4] [seed]
+
+# As part of rafaelia_core (NDK):
+ndk-build NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=rmr/Rrr/Android_nomalloc.mk
+```
+
+---
+
+### ZIPRAF — Deterministic Manifesto Matrix Index
+
+> **Module**: `rmr/Rrr/zipraf_index.h` + `zipraf_index.c`  
+> **Status**: ✅ Production — merged in PR #190
+
+ZIPRAF is a **non-compression, multidimensional deterministic storage model**. Physical bytes in the ZIP container are never modified. Instead, the manifesto overlays **8 reading modes × 33 density levels** of logical addressing structure over the same physical bytes — like DNA codons over atoms: the atoms (bytes) stay fixed while the codon table (manifesto) gives them meaning at 264 different resolutions.
+
+```
+Logical capacity = physical_size × 8 × 33 = physical_size × 264
+  1 GB ZIP  →  264 GB addressable logical space
+  1 TB ZIP  →  264 TB  (→ "1 000 TB+" design target)
+```
+
+**Manifesto Matrix: 8 Modes × 33 Density Levels**
+
+| Mode ID | Name | Description |
+|---|---|---|
+| 0 | `DIRECT` | 1:1 physical byte-offset mapping |
+| 1 | `MEMORIA` | In-memory overlay mapping |
+| 2 | `LEETRA` | Symbol / character lattice index |
+| 3 | `ORBITAL` | Harmonic frequency bins (Q16.16) |
+| 4 | `TOROIDAL` | Toroidal stride addressing over `zip_size` |
+| 5 | `SIGIL` | Sigil-intent keyed — IA_SIGILS control plane |
+| 6 | `FRACTAL` | Fractal subdivision — block → sub-blocks |
+| 7 | `ENTROPIC` | Entropy-ordered: highest-entropy blocks first |
+
+**Density Levels**: level 1 = one entry covers the entire ZIP file; level 33 = one entry ≈ 4 KB block. Block size at level `d` = `clamp(zip_size >> (d-1), 4096, zip_size)`.
+
+**Manifesto Entry** (`ZrEntry`, 28 bytes packed+aligned(4)):
+
+| Field | Type | Description |
+|---|---|---|
+| `mode` | `uint8_t` | `ZrMode` 0–7 |
+| `density` | `uint8_t` | Density level 1–33 |
+| `mod_id` | `uint16_t` | Module ID (`0x0987 + mode`) |
+| `k` | `uint32_t` | Dimension key (`bi × 23 + mode`) |
+| `offset` | `uint64_t` | Physical byte offset inside ZIP |
+| `len` | `uint32_t` | Logical data length in bytes |
+| `policy` | `uint8_t` | `ZrPolicy` access policy |
+| `flags` | `uint8_t` | `ZR_FLAG_*` validity/redundancy flags |
+| `ext` | `uint16_t` | Extension: sigil ID, orbital freq, etc. |
+| `crc32` | `uint32_t` | CRC32C of this entry (excluding `crc32` field) |
+
+**Access Policies**: `DIRETA` (direct), `READONLY`, `OVERLAY` (coherence redundancy), `SIGIL_KEY` (intent-unlocked).
+
+**Geometric Coherence Theorem** (∀ k ∈ n, G/Sₖ is reconstructible):
+Removing any one mode leaves the other 7 projections intact. Implemented via `ZR_FLAG_REDUNDANT` + `ZR_POL_OVERLAY` on the ENTROPIC mode.
+
+**Public API**:
+```c
+void     zr_init(ZrManifest *m, const char *zip_path, uint64_t zip_size);
+int      zr_add(ZrManifest *m, ZrMode mode, uint8_t density,
+                uint16_t mod_id, uint32_t k,
+                uint64_t offset, uint32_t len, ZrPolicy policy);
+ZrEntry *zr_lookup(ZrManifest *m, ZrMode mode, uint8_t density,
+                   uint16_t mod_id, uint32_t k);
+ZrEntry *zr_lookup_by_offset(ZrManifest *m, uint64_t offset, uint32_t len);
+int      zr_verify(const ZrManifest *m);          /* returns 1=OK, 0=corrupt */
+int      zr_auto_index(ZrManifest *m, uint64_t zip_size, uint32_t block_size);
+void     zr_print(const ZrManifest *m);
+```
+
+> ⚠️ **Stack warning**: `ZrManifest` is ~59 KB. Declare it `static` or use an arena — **never on a thread stack**.
+
+**Build**:
+```bash
+# Standalone tool:
+gcc -std=c11 -O2 -DZIPRAF_BUILD_MAIN -o zipraf_tool rmr/Rrr/zipraf_index.c
+./zipraf_tool /path/to/archive.zip
+
+# As part of rafaelia_core (NDK):
+ndk-build NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=rmr/Rrr/Android_nomalloc.mk
+```
+
+---
 
 ### Quick Start
 
@@ -210,12 +355,24 @@ Uso:
 - 🗂️ [Loose Files Inventory](./ARQUIVOS_SOLTOS_INVENTARIO.md) - Audit of `.md` and root loose files
 - 🔗 [External Integration Map](./docs/EXTERNAL_INTEGRATION_MAP.md)
 - 🔗 [Symbol Encoding Policy](./docs/SYMBOL_ENCODING_POLICY.md)
+- 🔍 [CTI BITSTACK — Raw Scanner](./rmr/Rrr/cti_raw_reader.h) — `rmr/Rrr/cti_raw_reader.h/.c`
+- 📦 [ZIPRAF Manifesto Index](./rmr/Rrr/zipraf_index.h) — `rmr/Rrr/zipraf_index.h/.c`
+- ⚙️ [NDK nomalloc build rules](./rmr/Rrr/Android_nomalloc.mk) — `rmr/Rrr/Android_nomalloc.mk`
+- 📐 [RAFAELIA Math Formulas](./rmr/Rrr/RAFAELIA_MATH_FORMULAS.md) — CRC32C, entropy, geometric coherence
 
 ***
 
 ## Contents
+
+**RAFAELIA Modules**
+- [CTI BITSTACK — Raw File Scanner](#cti-bitstack--deterministic-raw-file-scanner)
+- [ZIPRAF — Manifesto Matrix Index](#zipraf--deterministic-manifesto-matrix-index)
+- [ROADMAP](#roadmap)
+- [Total Module Inventory](#total-module-inventory--rmrrrr)
+
+**App**
 - [Fork Notice and Attribution](#fork-notice-and-attribution)
-- [Termux RAFCODEΦ - Android 15 Ready](#-termux-rafcodeφ---android-15-ready)
+- [Termux RAFCODEΦ - Android 15/16 Ready](#-termux-rafcodeφ---android-1516-ready)
 - [Termux App and Plugins](#termux-app-and-plugins)
 - [Installation](#installation)
 - [Uninstallation](#uninstallation)
@@ -647,6 +804,124 @@ Every contribution, no matter how small, is significant and acknowledged. Even a
 - Hashes de bootstrap BLAKE3 e SHA256 são gerados por `scripts/prepare_bootstrap_env.sh`.
 
 ABIs validadas na trilha de build local: `armeabi-v7a`, `arm64-v8a` e `x86_64`.
+
+## ROADMAP
+
+> Current iteration: **RMR v1.0** — CTI BITSTACK + ZIPRAF merged.  
+> Next iteration: **RMR v1.1** — JNI bridge + Android API surface.
+
+### ✅ Delivered (merged → master)
+
+| Module | Description | PR |
+|---|---|---|
+| `CTI BITSTACK` | Deterministic raw file scanner — 5 modes, CRC32C, entropy, bad-byte detection | #190 |
+| `ZIPRAF Manifesto` | 8×33 logical index over ZIP — non-compression deterministic manifesto | #190 |
+| `rafaelia_bitraf.c` | BITRAF 3D matrix (10×10×10+8 points, 42 bits/point, toroidal traversal) | earlier |
+| `rafaelia_core.c` | RMR core C11 module — main entry, dispatch, Q16.16 fixed-point types | earlier |
+| `baremetal_nomalloc.c` | Bare-metal deterministic helpers, arena allocator | earlier |
+| `rafaelia_sigma_omega.c` | Σ/Ω deterministic logic module | earlier |
+| `rafaelia_pss3.c` | PSS3 primitives with AARCH64 ASM path | earlier |
+| `rafaelia_orchestrator.c` | Pipeline orchestration, multi-stage dispatch | earlier |
+| `rafaelia_glue.c` | JNI thin bridge (no business logic) | earlier |
+| Android 15/16 page-size fix | 16KB page-size alignment via linker flags | earlier |
+| BLAKE3 bootstrap hashes | Deterministic bootstrap verification | earlier |
+
+### 🔲 Planned: RMR v1.1
+
+| Target | Description | Priority |
+|---|---|---|
+| JNI surface for CTI | Expose `cti_scan_fd` / `cti_print_report` via JNI | High |
+| JNI surface for ZIPRAF | Expose `zr_auto_index` / `zr_lookup` / `zr_verify` via JNI | High |
+| CTI entropy calibration | Compare against reference libpng/zlib entropy values | Medium |
+| ZIPRAF SIGIL mode | IA_SIGILS intent-key implementation | Medium |
+| CTI multi-file batch | Scan a directory tree, produce aggregate index | Medium |
+
+### 🔲 Planned: RMR v2.0
+
+| Target | Description | Priority |
+|---|---|---|
+| `librmr.so` | Standalone shared library target for JNI consumption | High |
+| Freestanding bootstrap | `_raf_start` entrypoint, zero-libc build | Medium |
+| ORBITAL frequency bins | Q16.16 harmonic analysis for ZIPRAF ORBITAL mode | Medium |
+| FRACTAL subdivision | Recursive block→sub-block manifesto for ZIPRAF FRACTAL mode | Medium |
+| DELTA_MISS calibration | Self-test harness: verify miss_score distribution on known inputs | Low |
+| ARM32 NEON paths | NEON-accelerated CRC32C / entropy for armeabi-v7a | Low |
+
+---
+
+## Total Module Inventory — `rmr/Rrr/`
+
+All native C/ASM source files in the RAFAELIA low-level module (`rmr/Rrr/`):
+
+### C Source Files
+
+| File | Role | Exported API |
+|---|---|---|
+| `cti_raw_reader.c` | CTI BITSTACK raw scanner | `cti_scan_fd`, `cti_print_report`, `cti_detect_fmt`, `cti_entropy` |
+| `zipraf_index.c` | ZIPRAF deterministic manifesto index | `zr_init`, `zr_add`, `zr_lookup`, `zr_lookup_by_offset`, `zr_verify`, `zr_auto_index`, `zr_print` |
+| `rafaelia_bitraf.c` | BITRAF 3D matrix 10×10×10+8 | `raf_bitraf_selftest`, `raf_bitraf_print` |
+| `rafaelia_core.c` | RMR core + Q16.16 types | `raf_core_init`, `raf_core_run` |
+| `rafaelia_orchestrator.c` | Multi-stage pipeline dispatch | `raf_orchestrator_run` |
+| `rafaelia_sigma_omega.c` | Σ/Ω logic module | `raf_sigma_omega_run` |
+| `rafaelia_glue.c` | JNI thin bridge | `Java_*` JNI methods |
+| `rafaelia_jni_direct.c` | Direct JNI for critical paths | `Java_*` JNI methods |
+| `rafaelia_pss3.c` | PSS3 primitives | `raf_pss3_*` |
+| `rafaelia_pss3_selftest.c` | PSS3 self-test harness | `raf_pss3_selftest_run` |
+| `rafaelia_gpu_mid.c` | GPU middleware (OpenCL/Vulkan dispatch) | `raf_gpu_mid_*` |
+| `baremetal_nomalloc.c` | Bare-metal helpers, arena allocator | `raf_arena_*`, `raf_bm_*` |
+| `bitstack.c` | 3D (X,Y,D) bit array | `bitstacks_create`, `bitstacks_set`, `bitstacks_get` |
+
+### Headers
+
+| File | Declares |
+|---|---|
+| `cti_raw_reader.h` | `CtiMode`, `CtiEntry`, `CtiScanner`, CTI API |
+| `zipraf_index.h` | `ZrMode`, `ZrPolicy`, `ZrEntry`, `ZrManifest`, ZIPRAF API |
+| `rafaelia_types.h` | Q16.16 types, core constants |
+| `rafaelia_arena.h` | Arena allocator macros |
+| `rafaelia_pss3.h` | PSS3 declarations |
+| `rafaelia_gpu_mid.h` | GPU middleware declarations |
+| `baremetal_nomalloc.h` | Bare-metal helpers declarations |
+| `bitstack.h` | Bitstack declarations |
+
+### Assembly Files (`rmr/Rrr/rafaelia_b*.S`)
+
+| File | Architecture | Role |
+|---|---|---|
+| `rafaelia_b1.S` | ARM32/ARM64 | Core arithmetic primitives |
+| `rafaelia_b2.S` | ARM32/ARM64 | CRC and bit-manipulation |
+| `rafaelia_b3.S` | ARM32/ARM64 | Memory scan primitives |
+| `rafaelia_b4.S` | ARM32/ARM64 | Matrix traversal helpers |
+| `rafaelia_b5.S` | ARM32/ARM64 | NEON SIMD vectorised ops |
+| `rafaelia_b6.S` | ARM32/ARM64 | Entropy primitives |
+| `rafaelia_b7.S` | ARM32/ARM64 | Deterministic hash paths |
+| `rafaelia_b8.S` | ARM32/ARM64 | Orchestration dispatch |
+| `raf_asm_b1.S` | ARM32 | ARM32-specific bootstrap path |
+| `rafaelia_pss3_aarch64.S` | ARM64 | PSS3 AArch64-optimised path |
+| `rafaelia_b1.S` | ARM32 | General purpose ARM32 path |
+
+### Build Files
+
+| File | Role |
+|---|---|
+| `Android_nomalloc.mk` | ndk-build rules: `rafaelia_core.so`, `cti_scan_tool`, `zipraf_tool` |
+| `Application.mk` | NDK application configuration (ABI filters, C++ STL) |
+| `build_all.sh` | Convenience wrapper: native + APK matrix |
+| `diagnose.sh` | Environment diagnostic tool |
+| `diagnose_termux.sh` | Termux-specific runtime diagnostic |
+| `termux_arm32_build.sh` | ARM32 cross-build script for Termux |
+| `rafaelia_master.sh` | Master pipeline: bootstrap → build → validate |
+
+### Generated / Data
+
+| Path | Description |
+|---|---|
+| `rmr/Rrr/generated/` | Auto-generated C stubs from pipeline |
+| `rmr/Rrr/hyperforms.json` | Hyperform declarations for JNI surface |
+| `rmr/Rrr/RAFAELIA_MATH_FORMULAS.md` | CRC32C, entropy, geometric coherence formulas |
+| `rmr/Rrr/README.md` | Module-level documentation |
+
+---
 
 ## Manifesto: Parábola do Zero e do Um
 

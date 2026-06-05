@@ -1,5 +1,3 @@
-#ifndef CTI_RAW_READER_H
-#define CTI_RAW_READER_H
 /**
  * cti_raw_reader.h — CTI BITSTACK: deterministic multi-mode raw file scanner
  * SPDX-License-Identifier: GPL-3.0-only
@@ -9,27 +7,28 @@
  *
  *   idx | size | ts | fid_crc32 | entropy | flags | xbad | miss_score
  *
- * Scan modes (from image: READERS = SEQ, SPIRAL, TOROID, RANDOM_PERM):
+ * Scan modes (READERS = SEQ, SPIRAL, TOROID, RANDOM_PERM, DELTA_MISS):
  *   CTI_SEQ         — sequential 0, 1, 2, …
  *   CTI_SPIRAL      — 2-D spiral traversal from centre of block grid
  *   CTI_TOROID      — toroidal stride, stride = gcd-coprime(n_blocks)
- *   CTI_RANDOM_PERM — xorshift64 deterministic permutation keyed by seed
+ *   CTI_RANDOM_PERM — xorshift64 pseudo-random mapping keyed by seed
  *   CTI_DELTA_MISS  — SEQ + live miss-score vs chain-CRC expectation
  *
  * Zero malloc. Static arrays. write(1,…) output. CRC32C inline.
  * ARM32 / ARM64 / x86_64 portable C11.
  */
-#pragma once
+#ifndef CTI_RAW_READER_H
+#define CTI_RAW_READER_H
 
 #include <stdint.h>
 #include <stddef.h>
 
 /* ── Format detection flags ────────────────────────────────────────────── */
 #define CTI_FMT_RAW   0x00u
-#define CTI_FMT_JPEG  0x01u   /* SOI = FF D8 */
-#define CTI_FMT_GIF   0x02u   /* GIF8x */
-#define CTI_FMT_PNG   0x04u   /* 89 50 4E 47 */
-#define CTI_FMT_ZIP   0x08u   /* PK 03 04 */
+#define CTI_FMT_JPEG  0x01u   /* SOI  = FF D8 */
+#define CTI_FMT_GIF   0x02u   /* GIF87a or GIF89a */
+#define CTI_FMT_PNG   0x04u   /* 89 50 4E 47 0D 0A 1A 0A */
+#define CTI_FMT_ZIP   0x08u   /* PK 03 04 local-file-header */
 
 /* ── Scan modes ─────────────────────────────────────────────────────────── */
 typedef enum {
@@ -41,7 +40,7 @@ typedef enum {
     CTI_MODE_COUNT  = 5
 } CtiMode;
 
-/* ── Per-block index entry (26 bytes packed) ────────────────────────────── */
+/* ── Per-block index entry (28 bytes packed) ────────────────────────────── */
 typedef struct __attribute__((packed)) {
     uint32_t idx;        /* physical block index */
     uint32_t size;       /* bytes read from this block */
@@ -51,7 +50,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  flags;      /* CTI_FMT_* of detected file format */
     uint8_t  xbad;       /* saturated count of bad-byte run events */
     int16_t  miss_score; /* DELTA_MISS: signed deviation from expected chain */
-} CtiEntry;              /* 26 bytes */
+} CtiEntry;              /* 28 bytes */
 
 /* ── Scanner context ────────────────────────────────────────────────────── */
 #define CTI_MAX_ENTRIES  1024u
@@ -75,15 +74,16 @@ typedef struct {
 
 /* Scan open file descriptor fd with given mode and seed.
  * Fills sc->entries[]. Returns 0 on success, -1 on error. */
-int     cti_scan_fd(CtiScanner *sc, int fd, CtiMode mode, uint32_t seed);
+int      cti_scan_fd(CtiScanner *sc, int fd, CtiMode mode, uint32_t seed);
 
 /* Print human-readable report to stdout (write() only). */
-void    cti_print_report(const CtiScanner *sc);
+void     cti_print_report(const CtiScanner *sc);
 
-/* Detect file format from first hdr_len bytes (≥ 4 needed). */
-uint8_t cti_detect_fmt(const uint8_t *hdr, uint32_t hdr_len);
+/* Detect file format from first hdr_len bytes (>= 8 recommended). */
+uint8_t  cti_detect_fmt(const uint8_t *hdr, uint32_t hdr_len);
 
-/* Estimate Shannon entropy of buf[0..len-1], scaled × 1000. */
+/* Estimate Shannon entropy of buf[0..len-1], scaled × 1000.
+ * Range: 0 (all bytes identical) … 8000 (uniform byte distribution). */
 uint32_t cti_entropy(const uint8_t *buf, uint32_t len);
 
 #endif /* CTI_RAW_READER_H */
