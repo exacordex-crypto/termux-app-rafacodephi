@@ -132,6 +132,10 @@ As direções reversas partem do resultado desejado e voltam para as condições
 | `CODE_BACKED` | Sim. | Sim, se build passa. | Código, teste e rollback. |
 | `RISK_OPEN` | Sim, em risco. | Só com mitigação. | Owner, impacto e condição de fechamento. |
 
+## Arquivo organizado da sessão Vectras-VM-Android
+
+A organização material desta sessão agora possui um arquivo próprio em `docs/knowledge_archives/vectras-vm-android/`. A navegação começa no README, usa `catalog.json` como fonte legível por máquina, expande E20/E13/S11 na matriz de blocos e aplica gates de claim para impedir que metáfora ou intenção sejam promovidas a fato sem teste.
+
 ## Próximos passos recomendados
 
 1. Usar `docs/RAFAELIA_5_LEVEL_DOCUMENTATION_NAVIGATION.md` como inventário automático de Markdown/TXT em até 5 níveis e comparar com índices existentes.
