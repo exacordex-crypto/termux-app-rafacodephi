@@ -12,7 +12,9 @@ LOCAL_MODULE    := rafaelia_core
 LOCAL_SRC_FILES := \
     baremetal_nomalloc.c \
     rafaelia_jni_direct.c \
-    rafaelia_orchestrator.c
+    rafaelia_orchestrator.c \
+    cti_raw_reader.c \
+    zipraf_index.c
 
 LOCAL_C_INCLUDES := $(LOCAL_PATH)
 
@@ -66,3 +68,30 @@ LOCAL_STATIC_LIBRARIES :=
 LOCAL_SHARED_LIBRARIES :=
 
 include $(BUILD_SHARED_LIBRARY)
+
+# ── rafaelia_bitraf (standalone tool, debug only) ──────────────────────────
+include $(CLEAR_VARS)
+LOCAL_MODULE    := rafaelia_bitraf
+LOCAL_SRC_FILES := rafaelia_bitraf.c
+LOCAL_CFLAGS    := -O2 -ffast-math -DNDEBUG -D_GNU_SOURCE
+include $(BUILD_EXECUTABLE)
+
+# ── cti_scan_tool (standalone: scan any file with CTI BITSTACK) ────────────
+include $(CLEAR_VARS)
+LOCAL_MODULE    := cti_scan_tool
+LOCAL_SRC_FILES := cti_raw_reader.c
+LOCAL_CFLAGS    := -O2 -DNDEBUG -D_GNU_SOURCE -DCTI_BUILD_MAIN
+ifeq ($(TARGET_ARCH_ABI),arm64-v8a)
+LOCAL_CFLAGS += -march=armv8-a+crc -DRAF_ARCH64
+endif
+include $(BUILD_EXECUTABLE)
+
+# ── zipraf_tool (standalone: print manifesto for a ZIP) ───────────────────
+include $(CLEAR_VARS)
+LOCAL_MODULE    := zipraf_tool
+LOCAL_SRC_FILES := zipraf_index.c
+LOCAL_CFLAGS    := -O2 -DNDEBUG -D_GNU_SOURCE -DZIPRAF_BUILD_MAIN
+ifeq ($(TARGET_ARCH_ABI),arm64-v8a)
+LOCAL_CFLAGS += -march=armv8-a+crc -DRAF_ARCH64
+endif
+include $(BUILD_EXECUTABLE)
