@@ -1,6 +1,6 @@
 {
   "archive_id": "Vectras-VM-Android",
-  "schema_version": 1,
+  "schema_version": 2,
   "generated_for": "knowledge archive organization",
   "invariants": {
     "nomalloc": true,
@@ -11,7 +11,11 @@
     "audit_trail_required": true,
     "attractor_count": 42,
     "bitomega_period": 42,
-    "lyapunov_phi": "phi=(1-H)*C"
+    "lyapunov_phi": "phi=(1-H)*C",
+    "minimum_insertion_slots": 30000,
+    "failover_required": true,
+    "rollback_required": true,
+    "failsafe_required": true
   },
   "constants": {
     "PHI32": "0x9E3779B9",
@@ -113,6 +117,41 @@
       "name": "Claim Gates",
       "path": "docs/knowledge_archives/vectras-vm-android/CLAIM_GATES.md",
       "purpose": "status, prova, rollback e falsificacao"
+    },
+    {
+      "level": 4,
+      "name": "Enterprise Runbook",
+      "path": "docs/knowledge_archives/vectras-vm-android/ENTERPRISE_EXCELLENCE_RUNBOOK.md",
+      "purpose": "boas praticas, failsafe, failover, rollback e invariante 30000"
+    },
+    {
+      "level": 5,
+      "name": "Fullstack Capability Matrix",
+      "path": "docs/knowledge_archives/vectras-vm-android/FULLSTACK_ENTERPRISE_CAPABILITY_MATRIX.md",
+      "purpose": "capacidade enterprise por camada e teste"
+    },
+    {
+      "level": 6,
+      "name": "30000 Insertion Lattice",
+      "path": "docs/knowledge_archives/vectras-vm-android/INSERTION_LATTICE_30000.csv",
+      "purpose": "30000 slots determinísticos de trabalho/evidencia/mitigacao"
     }
-  ]
+  ],
+  "insertion_lattice": {
+    "path": "docs/knowledge_archives/vectras-vm-android/INSERTION_LATTICE_30000.csv",
+    "minimum_slots": 30000,
+    "semantics": "Each row is a deterministic work/evidence/mitigation slot; a row is not a claim of implemented production code until promoted through claim gates.",
+    "columns": [
+      "slot_id",
+      "record_id",
+      "layer",
+      "practice",
+      "axis",
+      "pipeline",
+      "flag",
+      "fail_mode",
+      "rollback"
+    ],
+    "falsification_condition": "Falha se a malha tiver menos de 30000 slots, IDs duplicados, coluna obrigatoria ausente ou slot promovido sem evidencia."
+  }
 }

@@ -38,6 +38,8 @@
 - catálogo JSON validável por script
 - matriz de expansão por blocos
 - gates de claim, evidência, rollback e failover
+- runbook enterprise com mais de 20 boas práticas
+- malha determinística de 30000 slots de inserção/trabalho/evidência
 - separação entre metáfora didática, hipótese e prova executável
 
 ---

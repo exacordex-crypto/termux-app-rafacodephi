@@ -8,12 +8,24 @@ implemented or benchmarked.
 
 from __future__ import annotations
 
+import csv
 import json
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG = ROOT / "docs" / "knowledge_archives" / "vectras-vm-android" / "catalog.json"
+REQUIRED_INSERTION_COLUMNS = {
+    "slot_id",
+    "record_id",
+    "layer",
+    "practice",
+    "axis",
+    "pipeline",
+    "flag",
+    "fail_mode",
+    "rollback",
+}
 REQUIRED_RECORD_KEYS = {
     "id",
     "title",
@@ -45,7 +57,19 @@ def main() -> int:
         return fail("bitomega_period must be 42")
     if invariants.get("lyapunov_phi") != "phi=(1-H)*C":
         return fail("lyapunov_phi contract changed")
-    for flag in ("nomalloc", "freestanding", "deterministic", "q16_16", "audit_trail_required"):
+    if invariants.get("minimum_insertion_slots") != 30000:
+        return fail("minimum_insertion_slots must be exactly 30000")
+    required_true_flags = (
+        "nomalloc",
+        "freestanding",
+        "deterministic",
+        "q16_16",
+        "audit_trail_required",
+        "failover_required",
+        "rollback_required",
+        "failsafe_required",
+    )
+    for flag in required_true_flags:
         if invariants.get(flag) is not True:
             return fail(f"invariant {flag} must be true")
 
@@ -75,6 +99,36 @@ def main() -> int:
     if missing_ids:
         return fail(f"missing required ids: {sorted(missing_ids)}")
 
+    insertion_lattice = data.get("insertion_lattice", {})
+    lattice_path = ROOT / insertion_lattice.get("path", "")
+    minimum_slots = insertion_lattice.get("minimum_slots")
+    if minimum_slots != invariants.get("minimum_insertion_slots"):
+        return fail("insertion lattice minimum does not match invariant")
+    if not lattice_path.is_file():
+        return fail(f"missing insertion lattice: {insertion_lattice.get('path')}")
+
+    with lattice_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if reader.fieldnames is None or REQUIRED_INSERTION_COLUMNS.difference(reader.fieldnames):
+            return fail("insertion lattice missing required columns")
+        slot_count = 0
+        slot_ids = set()
+        for row in reader:
+            slot_count += 1
+            slot_id = row.get("slot_id", "")
+            if not slot_id.startswith("INS-"):
+                return fail(f"invalid slot_id at row {slot_count}: {slot_id}")
+            if slot_id in slot_ids:
+                return fail(f"duplicate slot_id: {slot_id}")
+            slot_ids.add(slot_id)
+            if row.get("record_id") not in seen:
+                return fail(f"slot {slot_id} references unknown record_id {row.get('record_id')}")
+            for column in REQUIRED_INSERTION_COLUMNS:
+                if not row.get(column):
+                    return fail(f"slot {slot_id} has empty {column}")
+        if slot_count < minimum_slots:
+            return fail(f"insertion lattice has {slot_count} slots, expected at least {minimum_slots}")
+
     navigation = data.get("navigation")
     if not isinstance(navigation, list) or len(navigation) < 3:
         return fail("navigation must contain at least 3 levels")
@@ -83,7 +137,7 @@ def main() -> int:
         if not path.is_file():
             return fail(f"navigation path does not exist: {item.get('path')}")
 
-    print(f"PASS: {CATALOG.relative_to(ROOT)} records={len(records)} navigation={len(navigation)}")
+    print(f"PASS: {CATALOG.relative_to(ROOT)} records={len(records)} navigation={len(navigation)} insertion_slots={slot_count}")
     return 0
 
 

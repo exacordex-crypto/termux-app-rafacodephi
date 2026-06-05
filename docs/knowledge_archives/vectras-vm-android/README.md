@@ -11,6 +11,10 @@ A regra central é simples: quando não há evidência, o arquivo deve dizer `DO
 - Catálogo legível por máquina: [`catalog.json`](./catalog.json).
 - Expansão por blocos: [`EXPANSION_MATRIX.md`](./EXPANSION_MATRIX.md).
 - Gates de promoção de claims: [`CLAIM_GATES.md`](./CLAIM_GATES.md).
+- Runbook enterprise: [`ENTERPRISE_EXCELLENCE_RUNBOOK.md`](./ENTERPRISE_EXCELLENCE_RUNBOOK.md).
+- Matriz fullstack/enterprise: [`FULLSTACK_ENTERPRISE_CAPABILITY_MATRIX.md`](./FULLSTACK_ENTERPRISE_CAPABILITY_MATRIX.md).
+- Malha de 30000 inserções: [`INSERTION_LATTICE_30000.csv`](./INSERTION_LATTICE_30000.csv).
+- Gerador da malha: [`../../../scripts/verification/generate_vectras_insertion_lattice.py`](../../../scripts/verification/generate_vectras_insertion_lattice.py).
 - Validador local: [`../../../scripts/verification/validate_vectras_archive.py`](../../../scripts/verification/validate_vectras_archive.py).
 
 ## Invariante geométrica coerente
@@ -48,6 +52,12 @@ Essa fórmula não é tratada como prova física. Ela é tratada como contrato d
 | 3 | Gates | `CLAIM_GATES.md` | claims não sobem sem prova |
 | 4 | Código/teste | scripts, C, ASM, Gradle | somente quando há evidência |
 | 5 | Artefato | log, APK, benchmark, relatório | PASS/FAIL/SKIPPED rastreável |
+| 6 | Malha 30000 | `INSERTION_LATTICE_30000.csv` | cobertura mínima de slots de trabalho/evidência/mitigação |
+
+
+## Invariante de uso por excelência: 30000 inserções
+
+A exigência de no mínimo **30000 inserções** é tratada como uma cobertura mínima de trabalho auditável, não como promessa automática de funcionalidade. Cada linha da malha `INSERTION_LATTICE_30000.csv` representa um slot determinístico de arquitetura, prática, pipeline, modo de falha e rollback. A promoção de qualquer slot para código real continua passando pelos gates de verdade.
 
 ## Parábola didática
 

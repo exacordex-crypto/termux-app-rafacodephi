@@ -134,12 +134,13 @@ As direções reversas partem do resultado desejado e voltam para as condições
 
 ## Arquivo organizado da sessão Vectras-VM-Android
 
-A organização material desta sessão agora possui um arquivo próprio em `docs/knowledge_archives/vectras-vm-android/`. A navegação começa no README, usa `catalog.json` como fonte legível por máquina, expande E20/E13/S11 na matriz de blocos e aplica gates de claim para impedir que metáfora ou intenção sejam promovidas a fato sem teste.
+A organização material desta sessão agora possui um arquivo próprio em `docs/knowledge_archives/vectras-vm-android/`. A navegação começa no README, usa `catalog.json` como fonte legível por máquina, expande E20/E13/S11 na matriz de blocos, aplica gates de claim para impedir que metáfora ou intenção sejam promovidas a fato sem teste, adiciona runbook enterprise e codifica a invariante de no mínimo 30000 inserções em `INSERTION_LATTICE_30000.csv`.
 
 ## Próximos passos recomendados
 
 1. Usar `docs/RAFAELIA_5_LEVEL_DOCUMENTATION_NAVIGATION.md` como inventário automático de Markdown/TXT em até 5 níveis e comparar com índices existentes.
 2. Marcar documentos por domínio: build, Android, low-level, matemática, segurança, mercado, arquivo solto e manifesto.
-3. Criar uma matriz `claim -> arquivo -> teste -> status` para impedir promoção sem evidência.
-4. Validar os scripts oficiais `./run_tests.sh` e `./build.sh` quando o ambiente tiver toolchain completo.
-5. Manter esta página como entrada para prompts futuros que sejam amplos, simbólicos ou sem tema técnico fechado.
+3. Usar `docs/knowledge_archives/vectras-vm-android/INSERTION_LATTICE_30000.csv` como malha mínima de 30000 slots e promover lotes somente com evidência.
+4. Criar uma matriz `claim -> arquivo -> teste -> status` para impedir promoção sem evidência.
+5. Validar os scripts oficiais `./run_tests.sh` e `./build.sh` quando o ambiente tiver toolchain completo.
+6. Manter esta página como entrada para prompts futuros que sejam amplos, simbólicos ou sem tema técnico fechado.
