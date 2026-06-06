@@ -1,0 +1,14 @@
+invariant_id,invariant,reference_file,reference_pattern,check_kind,check_target,expected,mitigation
+V01,root VECTRA invariant block exists,AGENTS.md,## Invariants,regex_exists,AGENTS.md,## Invariants,Block release if root invariant contract is removed.
+V02,coprime toroidal traversal invariant is declared,AGENTS.md,"gcd\(Δr, R\) = 1",regex_exists,AGENTS.md,"gcd\(Δr, R\) = 1",Do not claim toroidal traversal without coprime proof.
+V03,attractor count invariant is declared,AGENTS.md,"\|A\| = 42",regex_exists,AGENTS.md,"\|A\| = 42",Do not alter attractor cardinality without explicit invariant update and tests.
+V04,BitOmega period invariant is declared,AGENTS.md,"period\(BitOmega\) = 42",regex_exists,AGENTS.md,"period\(BitOmega\) = 42",Block period claims unless period-42 verifier passes on runtime artifact.
+V05,Lyapunov phi invariant is declared,AGENTS.md,"φ = \(1-H\)·C",regex_exists,AGENTS.md,"φ = \(1-H\)·C",Keep phi formula fixed-point and reject float-only rewrites.
+V06,VOID paradox remains flagged,AGENTS.md,VOID paradox,regex_exists,AGENTS.md,VOID paradox,Do not silently patch or close attractor #22.
+V07,attractor table bug remains visible,AGENTS.md,attractor_table incomplete,regex_exists,AGENTS.md,attractor_table incomplete,Keep risk open until code table has 42 entries and test proof.
+V08,top42 csv has exactly 42 metric rows,top42.csv,top42 metric rows,csv_row_count,top42.csv,42,Regenerate top42 artifacts with scripts/run_top42_bench.sh and re-check.
+V09,top42 json has exactly 42 metrics,top42.json,metrics,json_metrics_count,top42.json,42,Regenerate top42 artifacts with scripts/run_top42_bench.sh and re-check.
+V10,top42 csv/json metric names match,top42.csv;top42.json,metric name set,top42_names_match,top42.csv;top42.json,match,Regenerate both artifacts from the same command.
+V11,claim matrix contains no CODE_BACKED row without executable check,reports/rafaelia_claim_execution_matrix.csv,CODE_BACKED,csv_code_backed_has_check,reports/rafaelia_claim_execution_matrix.csv,all,Demote claim or add executable check before promotion.
+V12,new metaphor audit is registered in concept map,docs/RAFAELIA_CONCEPT_CARRY_MAP.md,RAFAELIA_METAPHOR_OPERATIONAL_AUDIT_2026-06-06.md,regex_exists,docs/RAFAELIA_CONCEPT_CARRY_MAP.md,RAFAELIA_METAPHOR_OPERATIONAL_AUDIT_2026-06-06.md,Register or remove orphan audit documents.
+V13,Q16 period-42 recurrence verifier currently falsifies recurrence,scripts/verification/verify_period42_q16.py,period42_fixed_q16,command_exit_code,python3 scripts/verification/verify_period42_q16.py,1,Keep period-42 runtime claim blocked until recurrence/table is corrected and verifier exits 0.

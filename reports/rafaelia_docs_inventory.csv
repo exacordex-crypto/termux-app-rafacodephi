@@ -167,6 +167,7 @@ docs/RAFAELIA_LOOSE_FILES_MAP.md,2,documentação/navegação,DOC_INDEXED
 docs/RAFAELIA_LOWLEVEL_ASM_INDEX.md,2,low-level/arm,DOC_INDEXED
 docs/RAFAELIA_LOWLEVEL_TOTAL_ANALYSIS_REPORT.md,2,low-level/arm,DOC_INDEXED
 docs/RAFAELIA_MEMORY_MODEL.md,2,documentação/navegação,DOC_INDEXED
+docs/RAFAELIA_METAPHOR_OPERATIONAL_AUDIT_2026-06-06.md,2,segurança/auditoria,EVIDENCE_OR_TEST_PLAN
 docs/RAFAELIA_MISSHIT_CACHE.md,2,documentação/navegação,DOC_INDEXED
 docs/RAFAELIA_NOISE_ERROR_MITIGATION.md,2,documentação/navegação,DOC_INDEXED
 docs/RAFAELIA_PATH_GRAPH.md,2,documentação/navegação,DOC_INDEXED
@@ -207,6 +208,11 @@ docs/bootstrap-compatibility.md,2,android/bootstrap,DOC_INDEXED
 docs/bootstrap-failure-log-examples.md,2,android/bootstrap,DOC_INDEXED
 docs/en/index.md,3,documentação/navegação,DOC_INDEXED
 docs/inventario.md,2,documentação/navegação,DOC_INDEXED
+docs/knowledge_archives/vectras-vm-android/CLAIM_GATES.md,4,android/bootstrap,DOC_INDEXED
+docs/knowledge_archives/vectras-vm-android/ENTERPRISE_EXCELLENCE_RUNBOOK.md,4,android/bootstrap,DOC_INDEXED
+docs/knowledge_archives/vectras-vm-android/EXPANSION_MATRIX.md,4,android/bootstrap,DOC_INDEXED
+docs/knowledge_archives/vectras-vm-android/FULLSTACK_ENTERPRISE_CAPABILITY_MATRIX.md,4,android/bootstrap,DOC_INDEXED
+docs/knowledge_archives/vectras-vm-android/README.md,4,android/bootstrap,DOC_INDEXED
 docs/rafaelia/ANALISE_IMAGEM_E_PROCEDIMENTO.md,3,documentação/navegação,DOC_INDEXED
 docs/rafaelia/AUDITORIA.md,3,segurança/auditoria,EVIDENCE_OR_TEST_PLAN
 docs/rafaelia/BITRAF_LOWLEVEL_CORE.md,3,low-level/arm,DOC_INDEXED
@@ -237,6 +243,7 @@ reports/external_integration_status.md,2,conceito/manifesto/outros,ARTIFACT
 reports/rafaelia_claim_execution_results.md,2,conceito/manifesto/outros,ARTIFACT
 reports/vectra_grade_benchmarks.md,2,testes/benchmark,ARTIFACT
 reports/vectra_integration_report.md,2,matemática/vectra,ARTIFACT
+reports/vectra_invariant_results.md,2,matemática/vectra,ARTIFACT
 rmr/AUDITORIA.md,2,segurança/auditoria,EVIDENCE_OR_TEST_PLAN
 rmr/RAFAELIA_SEMENTES.txt,2,conceito/manifesto/outros,DOC_INDEXED
 rmr/README.md,2,documentação/navegação,DOC_INDEXED

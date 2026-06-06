@@ -203,7 +203,7 @@
     }
   ],
   "claims_sha256": "d8aa3de610b0bf9a748eb7d315a25eee23fecf7a738b57d95d6983ff24b832d7",
-  "document_count": 254,
+  "document_count": 261,
   "documents": [
     {
       "depth": 1,
@@ -1215,6 +1215,12 @@
     },
     {
       "depth": 2,
+      "domain": "segurança/auditoria",
+      "path": "docs/RAFAELIA_METAPHOR_OPERATIONAL_AUDIT_2026-06-06.md",
+      "status": "EVIDENCE_OR_TEST_PLAN"
+    },
+    {
+      "depth": 2,
       "domain": "documentação/navegação",
       "path": "docs/RAFAELIA_MISSHIT_CACHE.md",
       "status": "DOC_INDEXED"
@@ -1454,6 +1460,36 @@
       "status": "DOC_INDEXED"
     },
     {
+      "depth": 4,
+      "domain": "android/bootstrap",
+      "path": "docs/knowledge_archives/vectras-vm-android/CLAIM_GATES.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 4,
+      "domain": "android/bootstrap",
+      "path": "docs/knowledge_archives/vectras-vm-android/ENTERPRISE_EXCELLENCE_RUNBOOK.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 4,
+      "domain": "android/bootstrap",
+      "path": "docs/knowledge_archives/vectras-vm-android/EXPANSION_MATRIX.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 4,
+      "domain": "android/bootstrap",
+      "path": "docs/knowledge_archives/vectras-vm-android/FULLSTACK_ENTERPRISE_CAPABILITY_MATRIX.md",
+      "status": "DOC_INDEXED"
+    },
+    {
+      "depth": 4,
+      "domain": "android/bootstrap",
+      "path": "docs/knowledge_archives/vectras-vm-android/README.md",
+      "status": "DOC_INDEXED"
+    },
+    {
       "depth": 3,
       "domain": "documentação/navegação",
       "path": "docs/rafaelia/ANALISE_IMAGEM_E_PROCEDIMENTO.md",
@@ -1635,6 +1671,12 @@
     },
     {
       "depth": 2,
+      "domain": "matemática/vectra",
+      "path": "reports/vectra_invariant_results.md",
+      "status": "ARTIFACT"
+    },
+    {
+      "depth": 2,
       "domain": "segurança/auditoria",
       "path": "rmr/AUDITORIA.md",
       "status": "EVIDENCE_OR_TEST_PLAN"
@@ -1730,6 +1772,6 @@
       "status": "DOC_INDEXED"
     }
   ],
-  "documents_sha256": "77109b87f1c454bbcc11b043f3c944edaacc1c8f806430f76bee5d0239382d81",
+  "documents_sha256": "25bc5c9a05f534561a17277cbdd8b17b9420f52734533832a989c6cefb01f260",
   "max_depth": 5
 }
