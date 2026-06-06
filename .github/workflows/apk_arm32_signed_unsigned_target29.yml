@@ -36,10 +36,10 @@ jobs:
       ORG_GRADLE_PROJECT_targetSdkVersion: "29"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -59,7 +59,7 @@ jobs:
 
       - name: Upload unsigned debug ARM32 APK
         if: ${{ inputs.upload_debug_unsigned_arm32 }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-target29-unsigned-debug-armeabi-v7a-${{ github.sha }}
           path: dist/apk-matrix/unsigned/*debug*armeabi-v7a*.apk
@@ -67,7 +67,7 @@ jobs:
 
       - name: Upload unsigned release ARM32 APK
         if: ${{ inputs.signing_mode == 'both' || inputs.signing_mode == 'unsigned-only' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-target29-unsigned-release-armeabi-v7a-${{ github.sha }}
           path: dist/apk-matrix/unsigned/*release*armeabi-v7a*.apk
@@ -75,7 +75,7 @@ jobs:
 
       - name: Upload signed release ARM32 APK
         if: ${{ inputs.signing_mode == 'both' || inputs.signing_mode == 'signed-only' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-target29-signed-release-armeabi-v7a-${{ github.sha }}
           path: dist/apk-matrix/signed/*release*armeabi-v7a*-signed.apk
@@ -83,7 +83,7 @@ jobs:
 
       - name: Upload ARM32 reports
         if: ${{ inputs.upload_reports }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-target29-report-arm32-${{ github.sha }}
           path: |
@@ -95,7 +95,7 @@ jobs:
 
       - name: Upload local signing keystore
         if: ${{ inputs.upload_local_keystore }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: termux-target29-apk-arm32-local-keystore-${{ github.sha }}
           path: dist/local-release.keystore

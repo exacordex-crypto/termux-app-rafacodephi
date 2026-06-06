@@ -15,7 +15,7 @@ jobs:
   build-and-package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -33,12 +33,13 @@ jobs:
           python rmr/Rrr/generated/rafaelia_auto_calibration.py > ci_artifacts/generated/calibration_result.txt
       - name: Archive generated binaries/artifacts
         run: |
-          cp rmr/Rrr/generated/rafaelia_isa_spec.md ci_artifacts/generated/
-          cp rmr/Rrr/generated/rafaelia_ctrl_fpga.sv ci_artifacts/generated/
-          cp rmr/Rrr/generated/rafaelia_whitepaper.tex ci_artifacts/generated/
-          cp rmr/Rrr/generated/KNOWLEDGE_FLOW_MATRIX.md ci_artifacts/generated/
-          tar -czf rafaelia_generated_artifacts.tar.gz -C ci_artifacts/generated .
-      - uses: actions/upload-artifact@v4
+          tar -czf rafaelia_generated_artifacts.tar.gz \
+            rmr/Rrr/generated/rafaelia_metrics.png \
+            rmr/Rrr/generated/calibration_result.txt \
+            rmr/Rrr/generated/rafaelia_isa_spec.md \
+            rmr/Rrr/generated/rafaelia_ctrl_fpga.sv \
+            rmr/Rrr/generated/rafaelia_whitepaper.tex
+      - uses: actions/upload-artifact@v7
         with:
           name: rafaelia-generated
           path: rafaelia_generated_artifacts.tar.gz

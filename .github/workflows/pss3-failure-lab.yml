@@ -15,7 +15,7 @@ jobs:
   pss3:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: build pss3 tools
         run: |
           cc -O2 -Wall -Wextra -std=c11 -o pss3_failure_lab tools/pss3_failure_lab.c
@@ -38,7 +38,7 @@ jobs:
           if grep -q 'status=BLOCKER_BETA' pss3_report.txt; then
             echo 'BLOCKER_BETA found'; exit 1;
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pss3-report
           path: pss3_report.txt
