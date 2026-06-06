@@ -28,7 +28,7 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
       - name: Resolve NDK version
         id: ndk
         run: |
@@ -60,7 +60,7 @@ jobs:
         arch: [arm32, arm64, x86, x86_64, riscv64, armv7a-neon]
     steps:
       - uses: actions/checkout@v4
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
       - name: Resolve NDK version
         id: ndk
         run: |
