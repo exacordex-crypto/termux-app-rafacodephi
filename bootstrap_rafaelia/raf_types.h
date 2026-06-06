@@ -21,6 +21,9 @@ typedef u8 bool8;
 #define RAF_UNUSED __attribute__((unused))
 
 #define RAF_NULL ((void*)0)
-#define RAF_TERMUX_PREFIX_DEFAULT "/data/data/com.termux/files/usr"
+#ifndef RAF_TERMUX_PACKAGE_NAME
+#define RAF_TERMUX_PACKAGE_NAME "com.termux.rafacodephi"
+#endif
+#define RAF_TERMUX_PREFIX_DEFAULT "/data/data/" RAF_TERMUX_PACKAGE_NAME "/files/usr"
 
 #endif

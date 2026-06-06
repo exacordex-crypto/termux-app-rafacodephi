@@ -1,0 +1,132 @@
+[
+  {
+    "check_kind": "regex_exists",
+    "check_target": "AGENTS.md",
+    "detail": "pattern found in AGENTS.md: ## Invariants",
+    "expected": "## Invariants",
+    "invariant": "root VECTRA invariant block exists",
+    "invariant_id": "V01",
+    "mitigation": "Block release if root invariant contract is removed.",
+    "outcome": "PASS"
+  },
+  {
+    "check_kind": "regex_exists",
+    "check_target": "AGENTS.md",
+    "detail": "pattern found in AGENTS.md: gcd\\(Δr, R\\) = 1",
+    "expected": "gcd\\(Δr, R\\) = 1",
+    "invariant": "coprime toroidal traversal invariant is declared",
+    "invariant_id": "V02",
+    "mitigation": "Do not claim toroidal traversal without coprime proof.",
+    "outcome": "PASS"
+  },
+  {
+    "check_kind": "regex_exists",
+    "check_target": "AGENTS.md",
+    "detail": "pattern found in AGENTS.md: \\|A\\| = 42",
+    "expected": "\\|A\\| = 42",
+    "invariant": "attractor count invariant is declared",
+    "invariant_id": "V03",
+    "mitigation": "Do not alter attractor cardinality without explicit invariant update and tests.",
+    "outcome": "PASS"
+  },
+  {
+    "check_kind": "regex_exists",
+    "check_target": "AGENTS.md",
+    "detail": "pattern found in AGENTS.md: period\\(BitOmega\\) = 42",
+    "expected": "period\\(BitOmega\\) = 42",
+    "invariant": "BitOmega period invariant is declared",
+    "invariant_id": "V04",
+    "mitigation": "Block period claims unless period-42 verifier passes on runtime artifact.",
+    "outcome": "PASS"
+  },
+  {
+    "check_kind": "regex_exists",
+    "check_target": "AGENTS.md",
+    "detail": "pattern found in AGENTS.md: φ = \\(1-H\\)·C",
+    "expected": "φ = \\(1-H\\)·C",
+    "invariant": "Lyapunov phi invariant is declared",
+    "invariant_id": "V05",
+    "mitigation": "Keep phi formula fixed-point and reject float-only rewrites.",
+    "outcome": "PASS"
+  },
+  {
+    "check_kind": "regex_exists",
+    "check_target": "AGENTS.md",
+    "detail": "pattern found in AGENTS.md: VOID paradox",
+    "expected": "VOID paradox",
+    "invariant": "VOID paradox remains flagged",
+    "invariant_id": "V06",
+    "mitigation": "Do not silently patch or close attractor #22.",
+    "outcome": "PASS"
+  },
+  {
+    "check_kind": "regex_exists",
+    "check_target": "AGENTS.md",
+    "detail": "pattern found in AGENTS.md: attractor_table incomplete",
+    "expected": "attractor_table incomplete",
+    "invariant": "attractor table bug remains visible",
+    "invariant_id": "V07",
+    "mitigation": "Keep risk open until code table has 42 entries and test proof.",
+    "outcome": "PASS"
+  },
+  {
+    "check_kind": "csv_row_count",
+    "check_target": "top42.csv",
+    "detail": "top42.csv rows=42, expected=42",
+    "expected": "42",
+    "invariant": "top42 csv has exactly 42 metric rows",
+    "invariant_id": "V08",
+    "mitigation": "Regenerate top42 artifacts with scripts/run_top42_bench.sh and re-check.",
+    "outcome": "PASS"
+  },
+  {
+    "check_kind": "json_metrics_count",
+    "check_target": "top42.json",
+    "detail": "top42.json metrics=42, expected=42",
+    "expected": "42",
+    "invariant": "top42 json has exactly 42 metrics",
+    "invariant_id": "V09",
+    "mitigation": "Regenerate top42 artifacts with scripts/run_top42_bench.sh and re-check.",
+    "outcome": "PASS"
+  },
+  {
+    "check_kind": "top42_names_match",
+    "check_target": "top42.csv;top42.json",
+    "detail": "metric names match for 42 entries",
+    "expected": "match",
+    "invariant": "top42 csv/json metric names match",
+    "invariant_id": "V10",
+    "mitigation": "Regenerate both artifacts from the same command.",
+    "outcome": "PASS"
+  },
+  {
+    "check_kind": "csv_code_backed_has_check",
+    "check_target": "reports/rafaelia_claim_execution_matrix.csv",
+    "detail": "all CODE_BACKED rows have executable checks",
+    "expected": "all",
+    "invariant": "claim matrix contains no CODE_BACKED row without executable check",
+    "invariant_id": "V11",
+    "mitigation": "Demote claim or add executable check before promotion.",
+    "outcome": "PASS"
+  },
+  {
+    "check_kind": "regex_exists",
+    "check_target": "docs/RAFAELIA_CONCEPT_CARRY_MAP.md",
+    "detail": "pattern found in docs/RAFAELIA_CONCEPT_CARRY_MAP.md: RAFAELIA_METAPHOR_OPERATIONAL_AUDIT_2026-06-06.md",
+    "expected": "RAFAELIA_METAPHOR_OPERATIONAL_AUDIT_2026-06-06.md",
+    "invariant": "new metaphor audit is registered in concept map",
+    "invariant_id": "V12",
+    "mitigation": "Register or remove orphan audit documents.",
+    "outcome": "PASS"
+  },
+  {
+    "check_kind": "command_exit_code",
+    "check_target": "python3 scripts/verification/verify_period42_q16.py",
+    "detail": "exit=1, expected=1, stdout=period42_fixed_q16: FAIL first_counterexample.initial=0 first_counterexample.after_42=50223 sqrt3_over_2_q16=56756 pi_sin_279_q16=-203353",
+    "expected": "1",
+    "invariant": "Q16 period-42 recurrence verifier currently falsifies recurrence",
+    "invariant_id": "V13",
+    "mitigation": "Keep period-42 runtime claim blocked until recurrence/table is corrected and verifier exits 0.",
+    "outcome": "PASS"
+  }
+]

@@ -1,0 +1,161 @@
+@ ============================================================================
+@ rafaelia_core_armv7_bench.S
+@ Motor SIMD para Termux (ARMv7-A + NEON) com medição de ciclos e saída.
+@ ============================================================================
+.syntax unified
+.arch armv7-a
+.fpu neon
+.text
+.global _start
+.align 2
+
+_start:
+    @ ------------------------------------------------------------
+    @ 1. Alocação de 4KB na pilha (espaço de fase)
+    @ ------------------------------------------------------------
+    sub sp, sp, #4096
+    mov r4, sp                     @ r4 = base do buffer
+
+    @ ------------------------------------------------------------
+    @ 2. Constantes Phi e Sqrt2 (single-precision)
+    @ ------------------------------------------------------------
+    @ Phi = 1.618034 → 0x3FCEB851
+    movw r0, #0xB851
+    movt r0, #0x3FCE
+    vmov s0, r0
+    vdup.32 q0, d0[0]              @ q0 = [Phi, Phi, Phi, Phi]
+
+    @ Sqrt2 = 1.41421356 → 0x3FB504F3
+    movw r1, #0x04F3
+    movt r1, #0x3FB5
+    vmov s1, r1
+    vdup.32 q1, d1[0]              @ q1 = [Sqrt2, Sqrt2, Sqrt2, Sqrt2]
+
+    @ ------------------------------------------------------------
+    @ 3. Número de iterações
+    @ ------------------------------------------------------------
+    mov r6, #65536                 @ 64K iterações
+
+    @ ------------------------------------------------------------
+    @ 4. Leitura do contador de ciclos (PMCCNTR)
+    @ ------------------------------------------------------------
+    @ Habilita o contador de performance do usuário (PMUSERENR.EN)
+    mrc p15, 0, r2, c9, c14, 0
+    orr r2, r2, #1
+    mcr p15, 0, r2, c9, c14, 0
+
+    @ Habilita o contador de ciclos (PMCNTENSET.C)
+    mov r2, #0x80000000
+    mcr p15, 0, r2, c9, c12, 1
+
+    @ Zera o contador e inicia
+    mov r2, #0
+    mcr p15, 0, r2, c9, c13, 0    @ PMCCNTR = 0
+    mov r2, #1
+    mcr p15, 0, r2, c9, c12, 0    @ PMCR.E = 1 (enable)
+
+    @ Leitura do ciclo inicial
+    mrc p15, 0, r7, c9, c13, 0    @ r7 = start_cycles
+
+    @ ------------------------------------------------------------
+    @ 5. Loop principal SIMD
+    @ ------------------------------------------------------------
+.L_CORE_LOOP:
+    vld1.8 {q2, q3}, [r4]          @ carrega 32 bytes
+    veor q4, q2, q3                @ XOR mistura ergódica
+    vcvt.f32.u32 q5, q4            @ u32 → float
+    vmul.f32 q6, q5, q0            @ × Phi
+    vmul.f32 q7, q6, q1            @ × Sqrt2
+    vcvt.u32.f32 q4, q7            @ float → u32
+    vst1.8 {q4, q5}, [r4]          @ armazena 32 bytes
+
+    subs r6, r6, #1
+    bne .L_CORE_LOOP
+
+    @ Leitura do ciclo final
+    mrc p15, 0, r8, c9, c13, 0    @ r8 = end_cycles
+    sub r7, r8, r7                 @ r7 = total de ciclos gastos
+
+    @ Desabilita o contador
+    mov r2, #0
+    mcr p15, 0, r2, c9, c12, 0
+
+    @ ------------------------------------------------------------
+    @ 6. Exibição do resultado (syscall write)
+    @ ------------------------------------------------------------
+    @ String de cabeçalho
+    mov r0, #1                     @ stdout
+    adr r1, msg_header
+    ldr r2, =msg_header_len
+    mov r7, #4                     @ sys_write
+    svc #0
+
+    @ Converte r7 (ciclos) para string decimal no buffer
+    adr r1, num_buffer
+    mov r0, r7
+    bl uint32_to_str
+
+    @ Imprime o número de ciclos
+    mov r2, r0                     @ comprimento retornado pela função
+    mov r0, #1
+    adr r1, num_buffer
+    mov r7, #4
+    svc #0
+
+    @ Imprime rodapé
+    mov r0, #1
+    adr r1, msg_footer
+    ldr r2, =msg_footer_len
+    mov r7, #4
+    svc #0
+
+    @ ------------------------------------------------------------
+    @ 7. Syscall exit
+    @ ------------------------------------------------------------
+    mov r7, #1
+    mov r0, #0
+    svc #0
+
+@ ============================================================================
+@ Função: uint32_to_str
+@ Converte um inteiro de 32 bits (r0) para string decimal.
+@ Entrada: r0 = valor, r1 = buffer de destino (pelo menos 11 bytes)
+@ Saída:  r0 = comprimento da string
+@ ============================================================================
+uint32_to_str:
+    push {r4-r7, lr}
+    mov r4, r1                     @ r4 = início do buffer
+    add r5, r1, #10                @ r5 = fim do buffer (espaço para 10 dígitos + null)
+    mov r6, #10                    @ divisor
+
+    @ Gera os dígitos em ordem reversa
+1:  udiv r7, r0, r6
+    mls r3, r7, r6, r0             @ r3 = r0 % 10
+    add r3, r3, #'0'
+    strb r3, [r1], #1
+    mov r0, r7
+    cmp r0, #0
+    bne 1b
+
+    @ Inverte a string no buffer
+    sub r5, r1, #1                 @ r5 = último caractere escrito
+    mov r1, r4                     @ r1 = início do buffer
+2:  cmp r1, r5
+    bge 3f
+    ldrb r3, [r1]
+    ldrb r7, [r5]
+    strb r7, [r1], #1
+    strb r3, [r5], #-1
+    b 2b
+3:
+    sub r0, r1, r4                 @ comprimento = pos_final - início
+    pop {r4-r7, pc}
+
+.section .data
+msg_header:      .ascii "[RAFAELIA-ARMv7] Ciclos gastos: "
+msg_header_len = . - msg_header
+msg_footer:      .ascii "\n☯ Execução concluída.\n"
+msg_footer_len = . - msg_footer
+
+.section .bss
+num_buffer:      .space 16

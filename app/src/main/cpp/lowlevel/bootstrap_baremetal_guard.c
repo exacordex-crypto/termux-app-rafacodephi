@@ -58,7 +58,7 @@ int raf_bootstrap_guard_check_basic_dirs(const char* prefix) {
 }
 
 int raf_bootstrap_guard_check_required_bins(const char* prefix) {
-    static const char* bins[] = {"/bin/sh", "/bin/pkg", "/bin/busybox", "/bin/proot"};
+    static const char* bins[] = {"/bin/sh", "/bin/pkg"};
     char path[PATH_MAX];
     size_t i;
 
@@ -107,7 +107,7 @@ int raf_bootstrap_guard_validate_prefix(const char* prefix, char* out_json, int 
         proot_ok = raf_bootstrap_guard_check_exec(path) == RAF_OK;
     }
 
-    exec_ok = sh_ok && pkg_ok && busybox_ok && proot_ok;
+    exec_ok = sh_ok && pkg_ok;
     dirs_rc = raf_bootstrap_guard_check_basic_dirs(prefix);
     bins_rc = raf_bootstrap_guard_check_required_bins(prefix);
 

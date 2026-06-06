@@ -14,3 +14,11 @@ This folder now contains all requested Objective-5 artifacts:
 - `calibration_result.txt`
 - `rafaelia_whitepaper.pdf` (if TeX toolchain is available)
 - `rafaelia_generated_artifacts.tar.gz` (via GitHub Actions workflow)
+
+
+## Conceptual completion
+- `KNOWLEDGE_FLOW_MATRIX.md` — bridge from toroidal equations to multilingual/signal interpretation and falsification conditions.
+
+## Source-of-truth policy
+- This directory stores **source artifacts only** (`.md`, `.py`, `.sv`, `.tex`).
+- Build/runtime outputs (`.png`, `.txt`, `.pdf`, archives) are generated during local runs or GitHub Actions and must not be committed as source.

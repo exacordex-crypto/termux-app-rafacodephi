@@ -1,0 +1,42 @@
+# RAFAELIA Claim Execution Matrix
+
+## Propósito
+
+Esta matriz executa o próximo passo recomendado: ligar cada semente/claim a arquivo, status, comando verificável, condição de falsificação e rollback. Ela não transforma metáfora em prova; ela define o caminho para provar, negar ou manter `DOC_ONLY`.
+
+## Estados
+
+- `DOC_ONLY`: útil como semântica, parábola ou requisito, mas sem promoção para runtime/build.
+- `NEEDS_EVIDENCE`: precisa de teste, vetor, dataset ou inspeção antes de claim forte.
+- `NEEDS_BENCHMARK`: precisa de benchmark reproduzível antes de claim de desempenho/sinal.
+- `CODE_BACKED`: há comando/caminho de código ou artefato para verificação.
+- `RISK_OPEN`: risco conhecido permanece aberto; não fechar sem correção real.
+
+## Matriz
+
+| ID | Semente/claim | Origem | Status | Evidência | Check executável | Falsificação | Rollback/mitigação |
+|---|---|---|---|---|---|---|---|
+| C01 | T^7 toroidal state | Formulas 1-4,45 | DOC_ONLY | `docs/RAFAELIA_CONCEPT_CARRY_MAP.md` | `rg -n 'ToroidalMap|T\^7|\[0,1\)' docs Arme BugOrAdd` | No executable state encoder/decoder or normalization rule exists. | Keep as DOC_ONLY and do not wire into runtime. |
+| C02 | EMA coherence/entropy alpha=0.25 | Formulas 5-8 | NEEDS_EVIDENCE | `docs/RAFAELIA_CONCEPT_CARRY_MAP.md` | `rg -n 'alpha=0.25|\(1-H\).*C|entropy_milli' .` | Measured code uses a different alpha or cannot reproduce phi. | Gate claim behind docs until deterministic test vector exists. |
+| C03 | Attractor count |A|=42 | Formulas 9-10,23 | RISK_OPEN | `AGENTS.md` | `rg -n 'attractor_table|period-42|BitOmega|\|A\| = 42' .` | Table has fewer/more than 42 entries or period test fails. | Do not close known bug; keep doc-only until table/test fixed. |
+| C04 | Signal FFT/cardio correlation | Formulas 11-12,44 | NEEDS_BENCHMARK | `docs/RAFAELIA_HZ_AS_MEMORY.md` | `rg -n 'cardio|FFT|S\(omega\)|H_cardio|Hz' docs reports scripts` | No signal artifact or correlation baseline is present. | Label as model; do not assert biological measurement. |
+| C05 | Layer tensor/integral information | Formula 13,41,50 | DOC_ONLY | `docs/RAFAELIA_SEMANTIC_LAYERS.md` | `rg -n 'semantic|layer|tensor|Phi|mathcal' docs` | No layer composition implementation exists. | Preserve as navigation semantics only. |
+| C06 | Entropy approximation | Formulas 14,43 | NEEDS_EVIDENCE | `docs/RAFAELIA_CONCEPT_CARRY_MAP.md` | `rg -n 'entropy_milli|unique.*6000|transitions.*2000|entropy' app scripts docs` | Entropy formula differs from documented test vectors. | Keep claim out of runtime until vector set passes. |
+| C07 | XOR/FNV-like hash flow | Formulas 15,30-32 | NEEDS_EVIDENCE | `docs/RAFAELIA_CONCEPT_CARRY_MAP.md` | `rg -n '0x100000001B3|FNV|\^|xor|hash' app scripts rmr Arme` | Checksum differs across ABI or is described as cryptographic when not. | Classify as integrity/checksum only. |
+| C08 | CRC/Merkle integrity | Formulas 16-17,33 | CODE_BACKED | `docs/RAFAELIA_CONCEPT_CARRY_MAP.md` | `./scripts/raf_external_integrity.sh` | Integrity script fails or required digest missing. | Block promotion and keep previous artifact hashes. |
+| C09 | sqrt(3)/2 spiral/Fibonacci geometry | Formulas 18-22,38-39 | NEEDS_EVIDENCE | `docs/RAFAELIA_SQRT3_FIBONACCI_AUDIT.md` | `rg -n 'sqrt3|sqrt\(3\)|Fibonacci|Spiral|279' docs app scripts Arme` | Q16 conversion or recurrence test exceeds tolerance. | Demote performance/physics claims to DOC_ONLY. |
+| C10 | Capacity/log2 geometry | Formulas 24-25,46,49 | NEEDS_EVIDENCE | `docs/RAFAELIA_MEMORY_MODEL.md` | `rg -n 'log2|capacity|M.*N|C_geom|bits_geom' docs app scripts` | Buffer dimensions or bounds do not match capacity rule. | Fallback to explicit bounds documentation. |
+| C11 | VOID paradox / Pi max | Formulas 26-27 | RISK_OPEN | `AGENTS.md` | `rg -n 'VOID|Pi|max|paradox|attractor #22|#22' .` | VOID is silently patched or attractor #22 loses flag. | Keep #22 flagged; no silent patch. |
+| C12 | Coprime toroidal traversal | Formulas 28-29 | NEEDS_EVIDENCE | `docs/RAFAELIA_CONCEPT_CARRY_MAP.md` | `rg -n 'gcd|coprime|toroidal|stride|modulo' docs app scripts Arme` | gcd(delta, dimension) != 1 in traversal config. | Reject traversal table and keep previous route. |
+| C13 | VFC key stream XOR | Formulas 34-35 | DOC_ONLY | `docs/RAFAELIA_CONCEPT_CARRY_MAP.md` | `rg -n 'VFC|keystream|k\(t\)|xor' docs app scripts` | Claim is presented as secure encryption without threat model. | State experimental only; require security review. |
+| C14 | Physics/Maxwell/Hamiltonian metaphors | Formulas 36-37,47-48 | DOC_ONLY | `docs/RAFAELIA_SESSION_TRUTH_NAVIGATION.md` | `rg -n 'Maxwell|Hamilton|quant|sin\(Delta|E_link' docs` | Metaphor is promoted to measured physical claim. | Demote to parable/model until instrumented evidence exists. |
+| C15 | Multilingual sound/Hz semantic layer | Prompt linguistic/audio seed | NEEDS_BENCHMARK | `docs/RAFAELIA_SESSION_TRUTH_NAVIGATION.md` | `rg -n 'som|Hz|fonet|Unicode|multil|direção|direction|audio' docs` | No phonetic/acoustic dataset or reproducible transform exists. | Keep as semantic metadata and avoid runtime claim. |
+| C16 | Market/data feature matrix | Prompt market variables | NEEDS_EVIDENCE | `ANALISE_MERCADO.md` | `rg -n 'Mercado|SWOT|Projeções|Métricas|mobile|Termux' ANALISE_MERCADO.md` | No dataset split, leakage control, or metric artifact exists. | Document as schema; no financial recommendation. |
+| C17 | No-heap/no-GC hot path | User architecture constraint | NEEDS_EVIDENCE | `AGENTS.md` | `rg -n 'malloc|calloc|realloc|new |Garbage|heap' app rmr Arme scripts` | Hot path allocates heap or JNI path hides allocation. | Move allocation to cold path or keep module out of hot path. |
+| C18 | Branchless/low-friction path | User architecture constraint | NEEDS_EVIDENCE | `docs/RAFAELIA_BRANCHLESS_MAP.md` | `rg -n 'branchless|csel|csinc|if \(|for \(' docs app rmr Arme` | Branch-heavy path is claimed branchless without asm/C evidence. | Demote claim and add measured microbenchmark before restore. |
+| C19 | Failsafe/failover/rollback/watchdog | User operational constraint | NEEDS_EVIDENCE | `docs/ENGINEERING_SYSTEM_RUNBOOK.md` | `rg -n 'failsafe|failover|rollback|watchdog|smoke_release_gate' docs scripts reports` | No command or artifact demonstrates rollback/guard. | Keep as runbook requirement; do not call enterprise-ready. |
+| C20 | Documentation 5-level navigation | User catalog request | CODE_BACKED | `docs/RAFAELIA_5_LEVEL_DOCUMENTATION_NAVIGATION.md` | `python3 scripts/generate_rafaelia_navigation.py --max-depth 5 --check` | Generated docs differ from checked-in docs. | Regenerate and recommit deterministic artifacts. |
+
+## Gate enterprise/fullstack seguro
+
+Uma entrega só pode ser chamada de funcional/enterprise neste repositório quando os itens `CODE_BACKED` passam, os itens `RISK_OPEN` estão explicitamente aceitos ou corrigidos, e os itens `NEEDS_EVIDENCE`/`NEEDS_BENCHMARK` não são apresentados como fatos medidos.

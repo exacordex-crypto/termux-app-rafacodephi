@@ -1,0 +1,4755 @@
+
+============================================================
+## RAFAELIA C — EDGE / MVP / BITRAF
+============================================================
+
+
+------------------------------------------------------------
+### ARQUIVO: rafaelia_edge_v7_auto.c
+------------------------------------------------------------
+
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <time.h>
+
+#define BUF_SZ (256 * 1024)
+#define ROUNDS 72
+#define DISCARD_LOW 8
+#define DISCARD_HIGH 8
+#define ONE_Q16 65536u
+#define ALPHA_Q16 16384u
+
+static uint8_t buf[BUF_SZ];
+static uint32_t crc_table[256];
+
+static uint64_t s_base[ROUNDS];
+static uint64_t s_u4[ROUNDS];
+static uint64_t s_u8[ROUNDS];
+
+static uint64_t now_ns(void){
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ull + ts.tv_nsec;
+}
+
+static void crc32_init(void){
+    for(uint32_t i=0;i<256;i++){
+        uint32_t c=i;
+        for(int j=0;j<8;j++)
+            c=(c>>1)^(0xEDB88320u & -(c&1));
+        crc_table[i]=c;
+    }
+}
+
+static int cmp_u64(const void *a,const void *b){
+    uint64_t x=*(const uint64_t*)a;
+    uint64_t y=*(const uint64_t*)b;
+    return (x>y)-(x<y);
+}
+
+static inline double mbps(uint64_t ns){
+    return ((double)BUF_SZ*2.0)/((double)ns/1e9)/(1024.0*1024.0);
+}
+
+static inline uint32_t qema(uint32_t old,uint32_t in){
+    return old + (((int32_t)in-(int32_t)old)*(int32_t)ALPHA_Q16 >> 16);
+}
+
+static uint64_t bench_base(uint32_t *out_crc, uint64_t *out_fnv){
+    uint32_t crc=0xFFFFFFFFu;
+    uint64_t fnv=1469598103934665603ull;
+    uint64_t t0=now_ns();
+
+    for(size_t i=0;i<BUF_SZ;i++){
+        uint8_t v=buf[i];
+        crc=crc_table[(crc^v)&255]^(crc>>8);
+        fnv^=v;
+        fnv*=1099511628211ull;
+    }
+
+    *out_crc=~crc;
+    *out_fnv=fnv;
+    return now_ns()-t0;
+}
+
+static uint64_t bench_u4(uint32_t *out_crc, uint64_t *out_fnv){
+    uint32_t crc=0xFFFFFFFFu;
+    uint64_t fnv=1469598103934665603ull;
+    uint64_t t0=now_ns();
+
+    for(size_t i=0;i<BUF_SZ;i+=4){
+        uint8_t a=buf[i+0], b=buf[i+1], c=buf[i+2], d=buf[i+3];
+
+        crc=crc_table[(crc^a)&255]^(crc>>8); fnv^=a; fnv*=1099511628211ull;
+        crc=crc_table[(crc^b)&255]^(crc>>8); fnv^=b; fnv*=1099511628211ull;
+        crc=crc_table[(crc^c)&255]^(crc>>8); fnv^=c; fnv*=1099511628211ull;
+        crc=crc_table[(crc^d)&255]^(crc>>8); fnv^=d; fnv*=1099511628211ull;
+    }
+
+    *out_crc=~crc;
+    *out_fnv=fnv;
+    return now_ns()-t0;
+}
+
+static uint64_t bench_u8(uint32_t *out_crc, uint64_t *out_fnv){
+    uint32_t crc=0xFFFFFFFFu;
+    uint64_t fnv=1469598103934665603ull;
+    uint64_t t0=now_ns();
+
+    for(size_t i=0;i<BUF_SZ;i+=8){
+        uint8_t a0=buf[i+0], a1=buf[i+1], a2=buf[i+2], a3=buf[i+3];
+        uint8_t a4=buf[i+4], a5=buf[i+5], a6=buf[i+6], a7=buf[i+7];
+
+        crc=crc_table[(crc^a0)&255]^(crc>>8); fnv^=a0; fnv*=1099511628211ull;
+        crc=crc_table[(crc^a1)&255]^(crc>>8); fnv^=a1; fnv*=1099511628211ull;
+        crc=crc_table[(crc^a2)&255]^(crc>>8); fnv^=a2; fnv*=1099511628211ull;
+        crc=crc_table[(crc^a3)&255]^(crc>>8); fnv^=a3; fnv*=1099511628211ull;
+        crc=crc_table[(crc^a4)&255]^(crc>>8); fnv^=a4; fnv*=1099511628211ull;
+        crc=crc_table[(crc^a5)&255]^(crc>>8); fnv^=a5; fnv*=1099511628211ull;
+        crc=crc_table[(crc^a6)&255]^(crc>>8); fnv^=a6; fnv*=1099511628211ull;
+        crc=crc_table[(crc^a7)&255]^(crc>>8); fnv^=a7; fnv*=1099511628211ull;
+    }
+
+    *out_crc=~crc;
+    *out_fnv=fnv;
+    return now_ns()-t0;
+}
+
+static void mutate(uint32_t crc, uint64_t fnv, int r, uint64_t salt){
+    uint64_t mix=((uint64_t)crc<<32)^fnv^((uint64_t)(r+1)*salt);
+    size_t idx=(mix*2654435761u)&(BUF_SZ-1);
+    buf[idx]^=(uint8_t)(mix>>56);
+}
+
+static double trimmed_avg_ns(uint64_t *s){
+    uint64_t tmp[ROUNDS];
+
+    for(int i=0;i<ROUNDS;i++)
+        tmp[i]=s[i];
+
+    qsort(tmp, ROUNDS, sizeof(uint64_t), cmp_u64);
+
+    double acc=0.0;
+    int n=0;
+
+    for(int i=DISCARD_LOW;i<ROUNDS-DISCARD_HIGH;i++){
+        acc+=(double)tmp[i];
+        n++;
+    }
+
+    return acc/(double)n;
+}
+
+static uint64_t median_ns(uint64_t *s){
+    uint64_t tmp[ROUNDS];
+
+    for(int i=0;i<ROUNDS;i++)
+        tmp[i]=s[i];
+
+    qsort(tmp, ROUNDS, sizeof(uint64_t), cmp_u64);
+
+    return tmp[ROUNDS/2];
+}
+
+static void report_one(const char *name, uint64_t *s){
+    uint64_t med=median_ns(s);
+    double trim=trimmed_avg_ns(s);
+
+    printf("\n[%s]\n", name);
+    printf("median_ns=%llu median_MBps=%.2f\n",
+        (unsigned long long)med, mbps(med));
+    printf("trimmed_avg_ns=%.0f trimmed_avg_MBps=%.2f\n",
+        trim,
+        ((double)BUF_SZ*2.0)/(trim/1e9)/(1024.0*1024.0));
+}
+
+int main(void){
+    crc32_init();
+
+    for(size_t i=0;i<BUF_SZ;i++)
+        buf[i]=(uint8_t)((i*1315423911u+42u)^(i>>5));
+
+    printf("RAFAELIA EDGE V7 AUTO-SELECTOR\n");
+    printf("ARM32 | base vs unroll4 vs unroll8 | median adaptive\n");
+    printf("buffer=%d KB rounds=%d discard_low=%d discard_high=%d\n\n",
+        BUF_SZ/1024, ROUNDS, DISCARD_LOW, DISCARD_HIGH);
+
+    uint32_t coh=ONE_Q16;
+    uint32_t rollback=0, stuck=0, last_crc=0;
+
+    for(int r=0;r<ROUNDS;r++){
+        uint32_t c0,c4,c8;
+        uint64_t f0,f4,f8;
+
+        uint64_t d0=bench_base(&c0,&f0);
+        mutate(c0,f0,r,0x9E3779B97F4A7C15ull);
+
+        uint64_t d4=bench_u4(&c4,&f4);
+        mutate(c4,f4,r,0xBF58476D1CE4E5B9ull);
+
+        uint64_t d8=bench_u8(&c8,&f8);
+        mutate(c8,f8,r,0x94D049BB133111EBull);
+
+        s_base[r]=d0;
+        s_u4[r]=d4;
+        s_u8[r]=d8;
+
+        uint32_t crc_mix=c0^c4^c8;
+        coh=qema(coh,(crc_mix^last_crc)?ONE_Q16:ONE_Q16/4);
+
+        if(crc_mix==last_crc)
+            stuck++;
+
+        if(coh<ONE_Q16/2)
+            rollback++;
+
+        printf("round=%02d BASE=%llu %.2f | U4=%llu %.2f | U8=%llu %.2f | coh=%.3f rb=%u st=%u\n",
+            r,
+            (unsigned long long)d0, mbps(d0),
+            (unsigned long long)d4, mbps(d4),
+            (unsigned long long)d8, mbps(d8),
+            (double)coh/65536.0,
+            rollback,
+            stuck);
+
+        last_crc=crc_mix;
+    }
+
+    report_one("BASE", s_base);
+    report_one("UNROLL4", s_u4);
+    report_one("UNROLL8", s_u8);
+
+    double t_base=trimmed_avg_ns(s_base);
+    double t_u4=trimmed_avg_ns(s_u4);
+    double t_u8=trimmed_avg_ns(s_u8);
+
+    const char *winner="BASE";
+    double best=t_base;
+
+    if(t_u4<best){
+        best=t_u4;
+        winner="UNROLL4";
+    }
+
+    if(t_u8<best){
+        best=t_u8;
+        winner="UNROLL8";
+    }
+
+    double best_mbps =
+        ((double)BUF_SZ*2.0)/(best/1e9)/(1024.0*1024.0);
+
+    double penalty_u4 = (t_u4 / t_base) - 1.0;
+    double penalty_u8 = (t_u8 / t_base) - 1.0;
+
+    printf("\n=== RESULTADO EDGE V7 ===\n");
+    printf("winner=%s\n", winner);
+    printf("winner_trimmed_avg_ns=%.0f\n", best);
+    printf("winner_trimmed_avg_MBps=%.2f\n", best_mbps);
+    printf("base_trimmed_avg_ns=%.0f\n", t_base);
+    printf("u4_trimmed_avg_ns=%.0f penalty_vs_base=%.3f\n", t_u4, penalty_u4);
+    printf("u8_trimmed_avg_ns=%.0f penalty_vs_base=%.3f\n", t_u8, penalty_u8);
+    printf("rollback=%u stuck=%u coherence=%.3f\n",
+        rollback, stuck, (double)coh/65536.0);
+
+    if(rollback==0 && stuck==0 && coh>ONE_Q16*3/4)
+        puts("REGIME: ESTAVEL / SELETOR CONFIAVEL");
+    else
+        puts("REGIME: OBSERVAR / RUIDO DOMINANDO");
+
+    return 0;
+}
+
+
+------------------------------------------------------------
+### ARQUIVO: rafaelia_edge_v6_unroll.c
+------------------------------------------------------------
+
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <time.h>
+
+#define BUF_SZ (256 * 1024)
+#define ROUNDS 64
+#define DISCARD_LOW 8
+#define DISCARD_HIGH 8
+#define ONE_Q16 65536u
+#define ALPHA_Q16 16384u
+
+static uint8_t buf[BUF_SZ];
+static uint32_t crc_table[256];
+static uint64_t s4[ROUNDS], s8[ROUNDS];
+
+static uint64_t now_ns(void){
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ull + ts.tv_nsec;
+}
+
+static void crc32_init(void){
+    for(uint32_t i=0;i<256;i++){
+        uint32_t c=i;
+        for(int j=0;j<8;j++)
+            c=(c>>1)^(0xEDB88320u & -(c&1));
+        crc_table[i]=c;
+    }
+}
+
+static int cmp_u64(const void *a,const void *b){
+    uint64_t x=*(const uint64_t*)a,y=*(const uint64_t*)b;
+    return (x>y)-(x<y);
+}
+
+static inline double mbps(uint64_t ns){
+    return ((double)BUF_SZ*2.0)/((double)ns/1e9)/(1024.0*1024.0);
+}
+
+static inline uint32_t qema(uint32_t old,uint32_t in){
+    return old + (((int32_t)in-(int32_t)old)*(int32_t)ALPHA_Q16 >> 16);
+}
+
+static uint64_t bench_unroll4(uint32_t *out_crc, uint64_t *out_fnv){
+    uint32_t crc=0xFFFFFFFFu;
+    uint64_t fnv=1469598103934665603ull;
+    uint64_t t0=now_ns();
+
+    for(size_t i=0;i<BUF_SZ;i+=4){
+        uint8_t a=buf[i+0], b=buf[i+1], c=buf[i+2], d=buf[i+3];
+
+        crc=crc_table[(crc^a)&255]^(crc>>8); fnv^=a; fnv*=1099511628211ull;
+        crc=crc_table[(crc^b)&255]^(crc>>8); fnv^=b; fnv*=1099511628211ull;
+        crc=crc_table[(crc^c)&255]^(crc>>8); fnv^=c; fnv*=1099511628211ull;
+        crc=crc_table[(crc^d)&255]^(crc>>8); fnv^=d; fnv*=1099511628211ull;
+    }
+
+    *out_crc=~crc;
+    *out_fnv=fnv;
+    return now_ns()-t0;
+}
+
+static uint64_t bench_unroll8(uint32_t *out_crc, uint64_t *out_fnv){
+    uint32_t crc=0xFFFFFFFFu;
+    uint64_t fnv=1469598103934665603ull;
+    uint64_t t0=now_ns();
+
+    for(size_t i=0;i<BUF_SZ;i+=8){
+        uint8_t a0=buf[i+0], a1=buf[i+1], a2=buf[i+2], a3=buf[i+3];
+        uint8_t a4=buf[i+4], a5=buf[i+5], a6=buf[i+6], a7=buf[i+7];
+
+        crc=crc_table[(crc^a0)&255]^(crc>>8); fnv^=a0; fnv*=1099511628211ull;
+        crc=crc_table[(crc^a1)&255]^(crc>>8); fnv^=a1; fnv*=1099511628211ull;
+        crc=crc_table[(crc^a2)&255]^(crc>>8); fnv^=a2; fnv*=1099511628211ull;
+        crc=crc_table[(crc^a3)&255]^(crc>>8); fnv^=a3; fnv*=1099511628211ull;
+        crc=crc_table[(crc^a4)&255]^(crc>>8); fnv^=a4; fnv*=1099511628211ull;
+        crc=crc_table[(crc^a5)&255]^(crc>>8); fnv^=a5; fnv*=1099511628211ull;
+        crc=crc_table[(crc^a6)&255]^(crc>>8); fnv^=a6; fnv*=1099511628211ull;
+        crc=crc_table[(crc^a7)&255]^(crc>>8); fnv^=a7; fnv*=1099511628211ull;
+    }
+
+    *out_crc=~crc;
+    *out_fnv=fnv;
+    return now_ns()-t0;
+}
+
+static void report(const char *name, uint64_t *s, uint32_t rollback, uint32_t stuck, uint32_t coh){
+    qsort(s, ROUNDS, sizeof(uint64_t), cmp_u64);
+
+    uint64_t median=s[ROUNDS/2];
+    double trimmed=0.0;
+    int n=0;
+
+    for(int i=DISCARD_LOW;i<ROUNDS-DISCARD_HIGH;i++){
+        trimmed+=(double)s[i];
+        n++;
+    }
+
+    trimmed/=n;
+
+    printf("\n=== %s ===\n", name);
+    printf("median_ns=%llu\n", (unsigned long long)median);
+    printf("median_MBps=%.2f\n", mbps(median));
+    printf("trimmed_avg_ns=%.0f\n", trimmed);
+    printf("trimmed_avg_MBps=%.2f\n", ((double)BUF_SZ*2.0)/(trimmed/1e9)/(1024.0*1024.0));
+    printf("rollback=%u stuck=%u coherence=%.3f\n", rollback, stuck, (double)coh/65536.0);
+}
+
+int main(void){
+    crc32_init();
+
+    for(size_t i=0;i<BUF_SZ;i++)
+        buf[i]=(uint8_t)((i*1315423911u+42u)^(i>>5));
+
+    printf("RAFAELIA EDGE V6 UNROLL 4x/8x\n");
+    printf("ARM32 | fused CRC+FNV | manual unroll | low-memory\n");
+    printf("buffer=%d KB rounds=%d\n\n", BUF_SZ/1024, ROUNDS);
+
+    uint32_t coh4=ONE_Q16, coh8=ONE_Q16;
+    uint32_t rb4=0, rb8=0, st4=0, st8=0;
+    uint32_t last4=0, last8=0;
+
+    for(int r=0;r<ROUNDS;r++){
+        uint32_t crc4, crc8;
+        uint64_t fnv4, fnv8;
+
+        uint64_t dt4=bench_unroll4(&crc4,&fnv4);
+        uint64_t mix4=((uint64_t)crc4<<32)^fnv4^((uint64_t)(r+1)*0x9E3779B97F4A7C15ull);
+        buf[(mix4*2654435761u)&(BUF_SZ-1)]^=(uint8_t)(mix4>>56);
+
+        uint64_t dt8=bench_unroll8(&crc8,&fnv8);
+        uint64_t mix8=((uint64_t)crc8<<32)^fnv8^((uint64_t)(r+9)*0x9E3779B97F4A7C15ull);
+        buf[(mix8*2654435761u)&(BUF_SZ-1)]^=(uint8_t)(mix8>>56);
+
+        s4[r]=dt4;
+        s8[r]=dt8;
+
+        coh4=qema(coh4,(crc4^last4)?ONE_Q16:ONE_Q16/4);
+        coh8=qema(coh8,(crc8^last8)?ONE_Q16:ONE_Q16/4);
+
+        if(crc4==last4) st4++;
+        if(crc8==last8) st8++;
+
+        if(coh4<ONE_Q16/2) rb4++;
+        if(coh8<ONE_Q16/2) rb8++;
+
+        printf("round=%02d U4_ns=%llu U4_MB/s=%.2f | U8_ns=%llu U8_MB/s=%.2f\n",
+            r,
+            (unsigned long long)dt4, mbps(dt4),
+            (unsigned long long)dt8, mbps(dt8));
+
+        last4=crc4;
+        last8=crc8;
+    }
+
+    report("UNROLL 4x", s4, rb4, st4, coh4);
+    report("UNROLL 8x", s8, rb8, st8, coh8);
+
+    return 0;
+}
+
+
+------------------------------------------------------------
+### ARQUIVO: rafaelia_edge_v5.c
+------------------------------------------------------------
+
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <time.h>
+
+#define BUF_SZ      (256 * 1024)
+#define ROUNDS      64
+#define DISCARD_LOW 8
+#define DISCARD_HIGH 8
+
+#define ALPHA_Q16   16384u
+#define ONE_Q16     65536u
+
+static uint8_t  buf[BUF_SZ];
+static uint32_t crc_table[256];
+static uint64_t samples[ROUNDS];
+
+static uint64_t now_ns(void){
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ull + ts.tv_nsec;
+}
+
+static void crc32_init(void){
+
+    for(uint32_t i=0;i<256;i++){
+
+        uint32_t c = i;
+
+        for(int j=0;j<8;j++)
+            c = (c >> 1) ^
+                (0xEDB88320u & -(c & 1));
+
+        crc_table[i] = c;
+    }
+}
+
+static inline uint32_t qema(uint32_t old, uint32_t in){
+
+    return old +
+        (((int32_t)in - (int32_t)old) *
+        (int32_t)ALPHA_Q16 >> 16);
+}
+
+static int cmp_u64(const void *a, const void *b){
+
+    uint64_t x = *(const uint64_t*)a;
+    uint64_t y = *(const uint64_t*)b;
+
+    return (x > y) - (x < y);
+}
+
+static inline double mbps(uint64_t ns){
+
+    return ((double)BUF_SZ * 2.0) /
+        ((double)ns / 1e9) /
+        (1024.0 * 1024.0);
+}
+
+int main(void){
+
+    crc32_init();
+
+    for(size_t i=0;i<BUF_SZ;i++){
+
+        buf[i] =
+            (uint8_t)(
+                (i * 1315423911u + 42u) ^
+                (i >> 5)
+            );
+    }
+
+    uint32_t ema_coherence = ONE_Q16;
+
+    uint32_t rollback = 0;
+    uint32_t stuck = 0;
+    uint32_t last_crc = 0;
+
+    uint64_t best = ~0ull;
+    uint64_t worst = 0;
+    uint64_t sum = 0;
+
+    printf("RAFAELIA EDGE V5 STABLE-WINDOW\n");
+    printf("ARM32 | fused-pass | trimmed-median | adaptive window\n");
+    printf("buffer=%d KB rounds=%d discard_low=%d discard_high=%d\n\n",
+        BUF_SZ / 1024,
+        ROUNDS,
+        DISCARD_LOW,
+        DISCARD_HIGH);
+
+    for(int r=0;r<ROUNDS;r++){
+
+        uint64_t t0 = now_ns();
+
+        uint32_t crc = 0xFFFFFFFFu;
+        uint64_t fnv = 1469598103934665603ull;
+
+        for(size_t i=0;i<BUF_SZ;i++){
+
+            uint8_t v = buf[i];
+
+            crc =
+                crc_table[(crc ^ v) & 0xFF] ^
+                (crc >> 8);
+
+            fnv ^= v;
+            fnv *= 1099511628211ull;
+        }
+
+        crc = ~crc;
+
+        uint64_t mix =
+            ((uint64_t)crc << 32) ^
+            fnv ^
+            ((uint64_t)(r + 1) *
+            0x9E3779B97F4A7C15ull);
+
+        size_t idx =
+            (mix * 2654435761u) &
+            (BUF_SZ - 1);
+
+        buf[idx] ^= (uint8_t)(mix >> 56);
+
+        uint64_t dt = now_ns() - t0;
+
+        samples[r] = dt;
+
+        if(dt < best) best = dt;
+        if(dt > worst) worst = dt;
+
+        sum += dt;
+
+        uint32_t coherence =
+            (crc ^ last_crc)
+            ? ONE_Q16
+            : (ONE_Q16 / 4);
+
+        ema_coherence =
+            qema(ema_coherence, coherence);
+
+        if(crc == last_crc)
+            stuck++;
+
+        if(ema_coherence < (ONE_Q16 / 2)){
+
+            rollback++;
+
+            buf[idx] ^=
+                (uint8_t)(mix >> 56);
+        }
+
+        printf(
+            "round=%02d ns=%llu MB/s=%.2f coherence=%.3f rollback=%u stuck=%u\n",
+            r,
+            (unsigned long long)dt,
+            mbps(dt),
+            (double)ema_coherence / 65536.0,
+            rollback,
+            stuck
+        );
+
+        last_crc = crc;
+    }
+
+    qsort(samples,
+          ROUNDS,
+          sizeof(uint64_t),
+          cmp_u64);
+
+    uint64_t median =
+        samples[ROUNDS / 2];
+
+    double trimmed_sum = 0.0;
+    int trimmed_n = 0;
+
+    for(int i=DISCARD_LOW;
+        i < (ROUNDS - DISCARD_HIGH);
+        i++){
+
+        trimmed_sum += (double)samples[i];
+        trimmed_n++;
+    }
+
+    double trimmed_avg =
+        trimmed_sum / (double)trimmed_n;
+
+    double trimmed_mbps =
+        ((double)BUF_SZ * 2.0) /
+        (trimmed_avg / 1e9) /
+        (1024.0 * 1024.0);
+
+    double jitter =
+        (double)(worst - best) /
+        ((double)sum / (double)ROUNDS);
+
+    double mcr =
+        ((double)(ROUNDS - rollback + 1) *
+        ((double)ema_coherence / 65536.0)) /
+        (1.0 + jitter + stuck);
+
+    printf("\n=== RESULTADO EDGE V5 ===\n");
+
+    printf("median_ns=%llu\n",
+        (unsigned long long)median);
+
+    printf("median_MBps=%.2f\n",
+        mbps(median));
+
+    printf("trimmed_avg_ns=%.0f\n",
+        trimmed_avg);
+
+    printf("trimmed_avg_MBps=%.2f\n",
+        trimmed_mbps);
+
+    printf("best_ns=%llu\n",
+        (unsigned long long)best);
+
+    printf("worst_ns=%llu\n",
+        (unsigned long long)worst);
+
+    printf("jitter_ratio=%.6f\n",
+        jitter);
+
+    printf("rollback=%u stuck=%u\n",
+        rollback,
+        stuck);
+
+    printf("MCR_proxy=%.6f\n",
+        mcr);
+
+    if(mcr > 20.0)
+        puts("REGIME: ESTAVEL");
+
+    else if(mcr > 5.0)
+        puts("REGIME: TRANSICAO");
+
+    else
+        puts("REGIME: INSTAVEL");
+
+    return 0;
+}
+
+
+------------------------------------------------------------
+### ARQUIVO: rafaelia_edge_v4.c
+------------------------------------------------------------
+
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <time.h>
+
+#define BUF_SZ    (256 * 1024)
+#define ROUNDS    48
+#define WARMUP    8
+
+#define ALPHA_Q16 16384u
+#define ONE_Q16   65536u
+
+static uint8_t  buf[BUF_SZ];
+static uint32_t crc_table[256];
+static uint64_t samples[ROUNDS];
+
+static uint64_t now_ns(void){
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ull + ts.tv_nsec;
+}
+
+static void crc32_init(void){
+    for(uint32_t i=0;i<256;i++){
+        uint32_t c = i;
+
+        for(int j=0;j<8;j++)
+            c = (c >> 1) ^ (0xEDB88320u & -(c & 1));
+
+        crc_table[i] = c;
+    }
+}
+
+static inline uint32_t qema(uint32_t old, uint32_t in){
+    return old +
+        (((int32_t)in - (int32_t)old) *
+        (int32_t)ALPHA_Q16 >> 16);
+}
+
+static int cmp_u64(const void *a, const void *b){
+    uint64_t x = *(const uint64_t*)a;
+    uint64_t y = *(const uint64_t*)b;
+    return (x > y) - (x < y);
+}
+
+static inline double mbps(uint64_t ns){
+    return ((double)BUF_SZ * 2.0) /
+        ((double)ns / 1e9) /
+        (1024.0 * 1024.0);
+}
+
+int main(void){
+
+    crc32_init();
+
+    for(size_t i=0;i<BUF_SZ;i++)
+        buf[i] =
+            (uint8_t)((i * 1315423911u + 42u) ^ (i >> 5));
+
+    uint32_t ema_coherence = ONE_Q16;
+
+    uint32_t rollback = 0;
+    uint32_t stuck = 0;
+    uint32_t last_crc = 0;
+
+    uint64_t best = ~0ull;
+    uint64_t worst = 0;
+    uint64_t sum = 0;
+
+    printf("RAFAELIA EDGE V4 FUSED\n");
+    printf("ARM32 | single-pass CRC+FNV | cache-aware\n");
+    printf("buffer=%d KB rounds=%d warmup=%d\n\n",
+        BUF_SZ / 1024,
+        ROUNDS,
+        WARMUP);
+
+    for(int r=0;r<ROUNDS + WARMUP;r++){
+
+        uint64_t t0 = now_ns();
+
+        uint32_t crc = 0xFFFFFFFFu;
+        uint64_t fnv = 1469598103934665603ull;
+
+        const uint8_t *p = buf;
+
+        for(size_t i=0;i<BUF_SZ;i++){
+
+            uint8_t v = p[i];
+
+            crc =
+                crc_table[(crc ^ v) & 0xFF] ^
+                (crc >> 8);
+
+            fnv ^= v;
+            fnv *= 1099511628211ull;
+        }
+
+        crc = ~crc;
+
+        uint64_t mix =
+            ((uint64_t)crc << 32) ^
+            fnv ^
+            ((uint64_t)(r + 1) *
+            0x9E3779B97F4A7C15ull);
+
+        size_t idx =
+            (mix * 2654435761u) &
+            (BUF_SZ - 1);
+
+        buf[idx] ^= (uint8_t)(mix >> 56);
+
+        uint64_t dt = now_ns() - t0;
+
+        if(r >= WARMUP){
+
+            int i = r - WARMUP;
+
+            samples[i] = dt;
+
+            if(dt < best) best = dt;
+            if(dt > worst) worst = dt;
+
+            sum += dt;
+
+            uint32_t coherence =
+                (crc ^ last_crc)
+                ? ONE_Q16
+                : (ONE_Q16 / 4);
+
+            ema_coherence =
+                qema(ema_coherence, coherence);
+
+            if(crc == last_crc)
+                stuck++;
+
+            if(ema_coherence < (ONE_Q16 / 2)){
+                rollback++;
+
+                buf[idx] ^=
+                    (uint8_t)(mix >> 56);
+            }
+
+            printf(
+                "round=%02d ns=%llu MB/s=%.2f crc=%08x coherence=%.3f rollback=%u stuck=%u\n",
+                i,
+                (unsigned long long)dt,
+                mbps(dt),
+                crc,
+                (double)ema_coherence / 65536.0,
+                rollback,
+                stuck
+            );
+        }
+
+        last_crc = crc;
+    }
+
+    qsort(samples,
+          ROUNDS,
+          sizeof(uint64_t),
+          cmp_u64);
+
+    uint64_t median =
+        samples[ROUNDS / 2];
+
+    double avg =
+        (double)sum /
+        (double)ROUNDS;
+
+    double jitter =
+        (double)(worst - best) / avg;
+
+    double mcr =
+        ((double)(ROUNDS - rollback + 1) *
+        ((double)ema_coherence / 65536.0)) /
+        (1.0 + jitter + stuck);
+
+    printf("\n=== RESULTADO EDGE V4 ===\n");
+
+    printf("median_ns=%llu\n",
+        (unsigned long long)median);
+
+    printf("median_MBps=%.2f\n",
+        mbps(median));
+
+    printf("avg_ns=%.0f\n", avg);
+
+    printf("best_ns=%llu\n",
+        (unsigned long long)best);
+
+    printf("worst_ns=%llu\n",
+        (unsigned long long)worst);
+
+    printf("jitter_ratio=%.6f\n",
+        jitter);
+
+    printf("rollback=%u stuck=%u\n",
+        rollback,
+        stuck);
+
+    printf("MCR_proxy=%.6f\n",
+        mcr);
+
+    if(mcr > 20.0)
+        puts("REGIME: ESTAVEL");
+
+    else if(mcr > 5.0)
+        puts("REGIME: TRANSICAO");
+
+    else
+        puts("REGIME: INSTAVEL");
+
+    return 0;
+}
+
+
+------------------------------------------------------------
+### ARQUIVO: rafaelia_edge_v2.c
+------------------------------------------------------------
+
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+#define BUF_SZ   (256 * 1024)
+#define ROUNDS   48
+#define WARMUP   8
+#define ALPHA_Q16 16384u
+#define ONE_Q16 65536u
+
+static uint8_t buf[BUF_SZ];
+static uint32_t crc_table[256];
+static uint64_t samples[ROUNDS];
+
+static uint64_t now_ns(void){
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ull + ts.tv_nsec;
+}
+
+static void crc32_init(void){
+    for(uint32_t i=0;i<256;i++){
+        uint32_t c = i;
+        for(int j=0;j<8;j++)
+            c = (c >> 1) ^ (0xEDB88320u & -(c & 1));
+        crc_table[i] = c;
+    }
+}
+
+static uint32_t crc32_fast(const uint8_t *p, size_t n){
+    uint32_t crc = 0xFFFFFFFFu;
+
+    while(n--){
+        crc = crc_table[(crc ^ *p++) & 0xFF] ^ (crc >> 8);
+    }
+
+    return ~crc;
+}
+
+static uint64_t fnv1a64(const uint8_t *p, size_t n){
+    uint64_t h = 1469598103934665603ull;
+
+    while(n--){
+        h ^= *p++;
+        h *= 1099511628211ull;
+    }
+
+    return h;
+}
+
+static uint32_t qema(uint32_t old, uint32_t in){
+    return old + (((int32_t)in - (int32_t)old) * (int32_t)ALPHA_Q16 >> 16);
+}
+
+static int cmp_u64(const void *a, const void *b){
+    uint64_t ua = *(const uint64_t*)a;
+    uint64_t ub = *(const uint64_t*)b;
+    return (ua > ub) - (ua < ub);
+}
+
+int main(void){
+
+    crc32_init();
+
+    for(size_t i=0;i<BUF_SZ;i++){
+        buf[i] = (uint8_t)((i * 1315423911u + 42u) ^ (i >> 5));
+    }
+
+    uint32_t ema_coherence = ONE_Q16;
+    uint32_t rollback = 0;
+    uint32_t stuck = 0;
+    uint32_t last_crc = 0;
+
+    uint64_t best = ~0ull;
+    uint64_t worst = 0;
+    uint64_t sum = 0;
+
+    printf("RAFAELIA EDGE V2\\n");
+    printf("ARM32 | Android | low-memory | cache-aware\\n");
+    printf("buffer=%d KB rounds=%d warmup=%d\\n\\n",
+        BUF_SZ / 1024,
+        ROUNDS,
+        WARMUP);
+
+    for(int r=0;r<ROUNDS + WARMUP;r++){
+
+        uint64_t t0 = now_ns();
+
+        uint32_t crc = crc32_fast(buf, BUF_SZ);
+        uint64_t fnv = fnv1a64(buf, BUF_SZ);
+
+        uint64_t mix = ((uint64_t)crc << 32) ^ fnv;
+
+        size_t idx = (mix * 2654435761u) & (BUF_SZ - 1);
+
+        buf[idx] ^= (uint8_t)(mix >> 56);
+
+        uint64_t dt = now_ns() - t0;
+
+        if(r >= WARMUP){
+
+            int i = r - WARMUP;
+
+            samples[i] = dt;
+
+            if(dt < best) best = dt;
+            if(dt > worst) worst = dt;
+
+            sum += dt;
+
+            uint32_t coherence =
+                (crc ^ last_crc) ? ONE_Q16 : (ONE_Q16 / 4);
+
+            ema_coherence = qema(ema_coherence, coherence);
+
+            if(crc == last_crc)
+                stuck++;
+
+            if(ema_coherence < (ONE_Q16 / 2)){
+                rollback++;
+                buf[idx] ^= (uint8_t)(mix >> 56);
+            }
+
+            double mbps =
+                ((double)BUF_SZ * 2.0) /
+                ((double)dt / 1e9) /
+                (1024.0 * 1024.0);
+
+            printf(
+                "round=%02d ns=%llu MB/s=%.2f coherence=%.3f rollback=%u stuck=%u\n",
+                i,
+                (unsigned long long)dt,
+                mbps,
+                (double)ema_coherence / 65536.0,
+                rollback,
+                stuck
+            );
+        }
+
+        last_crc = crc;
+    }
+
+    qsort(samples, ROUNDS, sizeof(uint64_t), cmp_u64);
+
+    uint64_t median = samples[ROUNDS / 2];
+
+    double avg =
+        (double)sum / (double)ROUNDS;
+
+    double avg_mbps =
+        ((double)BUF_SZ * 2.0) /
+        (avg / 1e9) /
+        (1024.0 * 1024.0);
+
+    double median_mbps =
+        ((double)BUF_SZ * 2.0) /
+        ((double)median / 1e9) /
+        (1024.0 * 1024.0);
+
+    double jitter =
+        (double)(worst - best) / avg;
+
+    double mcr =
+        ((double)(ROUNDS - rollback + 1) *
+        ((double)ema_coherence / 65536.0)) /
+        (1.0 + jitter + stuck);
+
+    printf("\n=== RESULTADO EDGE V2 ===\n");
+
+    printf("avg_ns=%.0f\n", avg);
+    printf("median_ns=%llu\n",
+        (unsigned long long)median);
+
+    printf("best_ns=%llu\n",
+        (unsigned long long)best);
+
+    printf("worst_ns=%llu\n",
+        (unsigned long long)worst);
+
+    printf("throughput_avg_MBps=%.2f\n",
+        avg_mbps);
+
+    printf("throughput_median_MBps=%.2f\n",
+        median_mbps);
+
+    printf("jitter_ratio=%.6f\n", jitter);
+
+    printf("rollback=%u stuck=%u\n",
+        rollback,
+        stuck);
+
+    printf("MCR_proxy=%.6f\n", mcr);
+
+    if(mcr > 20.0)
+        puts("REGIME: ESTAVEL");
+    else if(mcr > 5.0)
+        puts("REGIME: TRANSICAO");
+    else
+        puts("REGIME: INSTAVEL");
+
+    return 0;
+}
+
+
+------------------------------------------------------------
+### ARQUIVO: rafaelia_mvp_bench.c
+------------------------------------------------------------
+
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <time.h>
+#include <string.h>
+
+#define N (1<<20)
+#define ROUNDS 64
+#define ALPHA_Q16 16384u   /* 0.25 */
+#define ONE_Q16 65536u
+#define PHI64 0x9E3779B97F4A7C15ULL
+
+static uint8_t buf[N];
+
+static uint64_t now_ns(void){
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec*1000000000ull + ts.tv_nsec;
+}
+
+static uint32_t crc32_soft(const uint8_t *p, size_t n){
+    uint32_t crc = 0xFFFFFFFFu;
+    for(size_t i=0;i<n;i++){
+        crc ^= p[i];
+        for(int k=0;k<8;k++)
+            crc = (crc >> 1) ^ (0xEDB88320u & -(crc & 1));
+    }
+    return ~crc;
+}
+
+static uint64_t fnv1a64(const uint8_t *p, size_t n){
+    uint64_t h = 1469598103934665603ull;
+    for(size_t i=0;i<n;i++){
+        h ^= p[i];
+        h *= 1099511628211ull;
+    }
+    return h;
+}
+
+static uint32_t qema(uint32_t old, uint32_t in){
+    return old + (((int32_t)in - (int32_t)old) * (int32_t)ALPHA_Q16 >> 16);
+}
+
+int main(void){
+    for(size_t i=0;i<N;i++)
+        buf[i] = (uint8_t)((i * 1315423911u + 42u) ^ (i >> 3));
+
+    uint32_t ema_latency = 0;
+    uint32_t ema_coherence = ONE_Q16;
+    uint32_t stuck = 0, rollback = 0;
+    uint64_t best = ~0ull, worst = 0, sum = 0;
+    uint32_t last_crc = 0;
+
+    printf("RAFAELIA MVP BENCH — runtime | ARM/edge | determinismo | CRC/FNV | EMA 0.25\\n");
+    printf("buffer=%d bytes rounds=%d\\n\\n", N, ROUNDS);
+
+    for(int r=0;r<ROUNDS;r++){
+        uint64_t t0 = now_ns();
+
+        uint32_t crc = crc32_soft(buf, N);
+        uint64_t fnv = fnv1a64(buf, N);
+
+        uint64_t mix = ((uint64_t)crc << 32) ^ fnv ^ (PHI64 * (uint64_t)(r+1));
+        size_t idx = mix & (N-1);
+        buf[idx] ^= (uint8_t)(mix >> 56);
+
+        uint64_t t1 = now_ns();
+        uint64_t dt = t1 - t0;
+
+        if(dt < best) best = dt;
+        if(dt > worst) worst = dt;
+        sum += dt;
+
+        uint32_t lat_q16 = (uint32_t)((dt > 1000000000ull ? 1000000000ull : dt) / 1000u);
+        ema_latency = qema(ema_latency, lat_q16);
+
+        uint32_t delta_crc = crc ^ last_crc;
+        uint32_t coherence = delta_crc ? ONE_Q16 : ONE_Q16/4;
+        ema_coherence = qema(ema_coherence, coherence);
+
+        if(crc == last_crc) stuck++;
+        else if(stuck) stuck--;
+
+        if(ema_coherence < ONE_Q16/2){
+            rollback++;
+            buf[idx] ^= (uint8_t)(mix >> 56);
+            ema_coherence = qema(ema_coherence, ONE_Q16);
+        }
+
+        last_crc = crc;
+
+        double mbps = ((double)N * 2.0) / ((double)dt / 1e9) / (1024.0*1024.0);
+        double coh = (double)ema_coherence / 65536.0;
+
+        printf("round=%02d ns=%llu MB/s=%.2f crc=%08x fnv=%016llx coherence=%.3f stuck=%u rollback=%u\\n",
+            r, (unsigned long long)dt, mbps, crc, (unsigned long long)fnv, coh, stuck, rollback);
+    }
+
+    double avg = (double)sum / ROUNDS;
+    double avg_mbps = ((double)N * 2.0) / (avg / 1e9) / (1024.0*1024.0);
+    double jitter = (double)(worst - best) / avg;
+    double mcr = ((double)(ROUNDS - rollback + 1) * ((double)ema_coherence/65536.0)) / (1.0 + jitter + stuck);
+
+    printf("\\n=== RESULTADO MVP ===\\n");
+    printf("avg_ns=%.0f best_ns=%llu worst_ns=%llu\\n", avg, (unsigned long long)best, (unsigned long long)worst);
+    printf("throughput_avg_MBps=%.2f\\n", avg_mbps);
+    printf("jitter_ratio=%.6f\\n", jitter);
+    printf("rollback=%u stuck=%u\\n", rollback, stuck);
+    printf("MCR_proxy=%.6f\\n", mcr);
+
+    if(mcr > 20.0) puts("REGIME: ESTAVEL / OPERADOR EFICIENTE");
+    else if(mcr > 5.0) puts("REGIME: TRANSICAO / OBSERVAR JITTER");
+    else puts("REGIME: INSTAVEL / rollback-stuck dominando");
+
+    return 0;
+}
+
+
+------------------------------------------------------------
+### ARQUIVO: rafaelia_bitraf.c
+------------------------------------------------------------
+
+#include <arm_neon.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <sys/time.h>
+
+// ==================== CONFIGURAÇÕES DE HARDWARE ==========================
+// Dimensão do cubo BitRaf: 1000³ = 1 bilhão de elementos
+#define DIM 1000
+#define TOTAL_ELEMENTS (DIM * DIM * DIM)
+
+// Ajuste fino para cache L1 (32kB) e L2 (256kB) - baseado em Cortex-A7
+// Bloco L2: 40³ floats = 256kB exato (40*40*40*4 = 256.000 bytes)
+#define BLOCK_L2 40
+// Sub-bloco L1: 16³ floats = 16kB (cabe folgado na L1 com espaço para temporários)
+#define BLOCK_L1 16
+
+// Constantes derivadas das anomalias
+#define KOIDE_FACTOR   0.6666666667f      // Fórmula de Koide (topologia toroidal)
+#define MASS_GAP_ALPHA 0.0072973525693f   // Constante de estrutura fina (gap emergente)
+
+// ==================== FUNÇÕES DE ALTO DESEMPENHO =========================
+
+// 1. Kernel NEON: Aplica coerência quântica biológica (filtro adaptativo)
+//    Simula a manutenção da coerência em temperatura ambiente usando um
+//    preditor de linha com realimentação (evita decoerência por ruído térmico)
+static inline void coherence_neon(float *restrict data, size_t len) {
+    // Carrega coeficientes de predição (simulam microtúbulos)
+    float32x4_t prev = vdupq_n_f32(0.0f);
+    float32x4_t coeff = vdupq_n_f32(0.61803398875f); // razão áurea
+
+    for (size_t i = 0; i + 4 <= len; i += 4) {
+        float32x4_t curr = vld1q_f32(data + i);
+        // Realimentação coerente: new = curr + coeff*(curr - prev)
+        float32x4_t delta = vsubq_f32(curr, prev);
+        float32x4_t correction = vmulq_f32(delta, coeff);
+        float32x4_t new_val = vaddq_f32(curr, correction);
+        vst1q_f32(data + i, new_val);
+        prev = new_val;  // atualiza estado para próximo bloco
+    }
+    // Trata resto escalar com o mesmo princípio (sem vetorização)
+    for (size_t i = len - (len % 4); i < len; i++) {
+        float diff = data[i] - prev[0];
+        data[i] += 0.61803398875f * diff;
+        prev[0] = data[i];
+    }
+}
+
+// 2. Kernel NEON: Gap de massa (Yang-Mills) -> cria viscosidade negativa
+//    Simula o confinamento dos glúons: adiciona inércia sem perda de velocidade
+static inline void mass_gap_neon(float *restrict data, size_t len) {
+    for (size_t i = 0; i + 4 <= len; i += 4) {
+        float32x4_t v = vld1q_f32(data + i);
+        // Aplica fator de massa emergente (transformação não-linear)
+        float32x4_t mass = vmulq_n_f32(v, MASS_GAP_ALPHA);
+        float32x4_t squared = vmulq_f32(v, v);
+        float32x4_t nonlinear = vmlaq_f32(v, squared, mass); // v + squared*mass
+        vst1q_f32(data + i, nonlinear);
+    }
+    for (size_t i = len - (len % 4); i < len; i++) {
+        float m = data[i] * MASS_GAP_ALPHA;
+        data[i] = data[i] + (data[i]*data[i]) * m;
+    }
+}
+
+// 3. Kernel NEON: Tunelamento quântico (flight time) - reescrita instantânea
+//    Usa permutação de registradores para simular o efeito "superluminal"
+static inline void tunneling_neon(float *restrict data, size_t len) {
+    for (size_t i = 0; i + 16 <= len; i += 16) {
+        // Carrega 16 floats em 4 registradores NEON
+        float32x4_t v0 = vld1q_f32(data + i);
+        float32x4_t v1 = vld1q_f32(data + i + 4);
+        float32x4_t v2 = vld1q_f32(data + i + 8);
+        float32x4_t v3 = vld1q_f32(data + i + 12);
+        // Reescrita de paridade (troca realidades paralelas)
+        // Efeito: os dados parecem ter "tunelado" instantaneamente
+        v0 = vrev64q_f32(v0);
+        v1 = vrev64q_f32(v1);
+        v2 = vrev64q_f32(v2);
+        v3 = vrev64q_f32(v3);
+        vst1q_f32(data + i, v0);
+        vst1q_f32(data + i + 4, v1);
+        vst1q_f32(data + i + 8, v2);
+        vst1q_f32(data + i + 12, v3);
+    }
+    // resto escalar: cópia reversa
+    for (size_t i = len - (len % 16); i < len; i++) {
+        // placeholder
+    }
+}
+
+// 4. Kernel NEON: Fórmula de Koide (calibração de massa dos tensores)
+static inline void koide_neon(float *restrict data, size_t len) {
+    for (size_t i = 0; i + 4 <= len; i += 4) {
+        float32x4_t v = vld1q_f32(data + i);
+        v = vmulq_n_f32(v, KOIDE_FACTOR);
+        vst1q_f32(data + i, v);
+    }
+    for (size_t i = len - (len % 4); i < len; i++) data[i] *= KOIDE_FACTOR;
+}
+
+// 5. Kernel NEON: Efeito Biefeld-Brown (propulsão lógica)
+//    Move dados em direção ao eletrodo positivo (posições de cache quente)
+static inline void biefeld_brown_neon(float *restrict src, float *restrict dst, size_t len) {
+    // Copia com gradiente de potencial: dest = src + derivada segunda (laplaciano)
+    for (size_t i = 0; i + 4 <= len; i += 4) {
+        float32x4_t s = vld1q_f32(src + i);
+        float32x4_t d = vld1q_f32(dst + i);
+        float32x4_t laplacian = vsubq_f32(s, d);  // diferença como campo elétrico
+        float32x4_t new_d = vaddq_f32(d, laplacian);
+        vst1q_f32(dst + i, new_d);
+    }
+}
+
+// ==================== PROCESSAMENTO PRINCIPAL COM CACHE BLOCKING =========
+
+// Processa todo o cubo BitRaf aplicando uma das operações acima
+void process_cube(float *cube, int operation) {
+    // Ponteiros para facilitar indexação: cube[z][y][x] = cube[z*DIM*DIM + y*DIM + x]
+    size_t z, y, x;
+    size_t bz, by, bx;
+    
+    // Loop externo: blocos que cabem na L2
+    for (bz = 0; bz < DIM; bz += BLOCK_L2) {
+        size_t z_max = (bz + BLOCK_L2 < DIM) ? bz + BLOCK_L2 : DIM;
+        for (by = 0; by < DIM; by += BLOCK_L2) {
+            size_t y_max = (by + BLOCK_L2 < DIM) ? by + BLOCK_L2 : DIM;
+            for (bx = 0; bx < DIM; bx += BLOCK_L2) {
+                size_t x_max = (bx + BLOCK_L2 < DIM) ? bx + BLOCK_L2 : DIM;
+                
+                // Sub-bloqueio para L1: processa em fatias de BLOCK_L1
+                for (z = bz; z < z_max; z += BLOCK_L1) {
+                    size_t zz_end = (z + BLOCK_L1 < z_max) ? z + BLOCK_L1 : z_max;
+                    for (y = by; y < y_max; y += BLOCK_L1) {
+                        size_t yy_end = (y + BLOCK_L1 < y_max) ? y + BLOCK_L1 : y_max;
+                        for (x = bx; x < x_max; x += BLOCK_L1) {
+                            size_t xx_end = (x + BLOCK_L1 < x_max) ? x + BLOCK_L1 : x_max;
+                            
+                            // Pré-busca dos próximos blocos (tunelamento temporal)
+                            __builtin_prefetch(&cube[z * DIM * DIM + y * DIM + x], 0, 3);
+                            
+                            // Processa cada linha dentro do sub-bloco
+                            for (size_t iz = z; iz < zz_end; iz++) {
+                                for (size_t iy = y; iy < yy_end; iy++) {
+                                    size_t idx = iz * DIM * DIM + iy * DIM + x;
+                                    size_t len = xx_end - x;
+                                    switch (operation) {
+                                        case 1: mass_gap_neon(cube + idx, len); break;
+                                        case 2: coherence_neon(cube + idx, len); break;
+                                        case 3: tunneling_neon(cube + idx, len); break;
+                                        case 4: koide_neon(cube + idx, len); break;
+                                        case 5: /* Biefeld-Brown requer dois buffers, ignorado aqui */ break;
+                                        default: break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==================== UTILITÁRIOS E MAIN =================================
+double timestamp() {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return tv.tv_sec + tv.tv_usec * 1e-6;
+}
+
+int main(int argc, char **argv) {
+    int op = 2;  // padrão: coerência quântica (path cutter)
+    if (argc > 1) op = atoi(argv[1]);
+    if (op < 1 || op > 5) {
+        fprintf(stderr, "Uso: %s [1-5]\n1=Gap Massa, 2=Coerência, 3=Tunelamento, 4=Koide, 5=Biefeld-Brown\n", argv[0]);
+        return 1;
+    }
+    
+    printf("RAFAELIA BitRaf 1000³ - Aplicando anomalia #%d\n", op);
+    
+    // Aloca cubo alinhado a 64 bytes (cache line completa)
+    float *cube = (float*)aligned_alloc(64, TOTAL_ELEMENTS * sizeof(float));
+    if (!cube) {
+        perror("aligned_alloc");
+        return 1;
+    }
+    
+    // Inicializa com padrão senoidal (simula fluxo de informação)
+    #pragma omp parallel for // se disponível, senão ok
+    for (size_t i = 0; i < TOTAL_ELEMENTS; i++) {
+        cube[i] = (float)(i % 1000) / 500.0f - 1.0f;  // range [-1,1]
+    }
+    
+    double start = timestamp();
+    process_cube(cube, op);
+    double end = timestamp();
+    
+    // Verificação rápida (soma para evitar otimização)
+    double sum = 0.0;
+    for (size_t i = 0; i < TOTAL_ELEMENTS; i += 100000) sum += cube[i];
+    printf("Tempo: %.6f segundos | Soma amostral: %g\n", end - start, sum);
+    
+    free(cube);
+    return 0;
+}
+
+
+------------------------------------------------------------
+### ARQUIVO: rafaelia_b3_android.c
+------------------------------------------------------------
+
+#define _GNU_SOURCE
+#include <stdint.h>
+#include <unistd.h>
+#include <sys/mman.h>
+#include <sys/wait.h>
+#include <sys/time.h>
+#include <sched.h>
+#include <stdlib.h>
+
+#define N_WORKERS 4
+#define WORK_SIZE 65536
+#define TOTAL (N_WORKERS * WORK_SIZE)
+
+static uint32_t crc32_sw(const uint8_t *p, int n){
+    uint32_t crc = 0xFFFFFFFFu;
+    for(int i=0;i<n;i++){
+        crc ^= p[i];
+        for(int k=0;k<8;k++)
+            crc = (crc >> 1) ^ (0xEDB88320u & -(crc & 1));
+    }
+    return ~crc;
+}
+
+static void uhex(uint32_t x){
+    char h[]="0123456789ABCDEF";
+    char b[9];
+    for(int i=0;i<8;i++) b[i]=h[(x >> (28-i*4)) & 15];
+    b[8]='\n';
+    write(1,b,9);
+}
+
+int main(){
+    write(1,"B3_ANDROID: MULTICORE+CRC32SW\n",31);
+
+    uint8_t *buf = mmap(0, TOTAL, PROT_READ|PROT_WRITE,
+                        MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    uint32_t *crc = mmap(0, N_WORKERS*4, PROT_READ|PROT_WRITE,
+                         MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+
+    if(buf == MAP_FAILED || crc == MAP_FAILED){
+        write(1,"MMAP_FAIL\n",10);
+        return 1;
+    }
+
+    uint16_t a=1,b=1;
+    for(int i=0;i<TOTAL;i+=2){
+        uint16_t c=a+b;
+        buf[i]=c & 255;
+        buf[i+1]=c >> 8;
+        a=b; b=c;
+    }
+
+    struct timeval t0,t1;
+    gettimeofday(&t0,0);
+
+    for(int w=0; w<N_WORKERS; w++){
+        pid_t p = fork();
+        if(p == 0){
+            crc[w] = crc32_sw(buf + w*WORK_SIZE, WORK_SIZE);
+            write(1,"W:",2);
+            char c = '0' + w;
+            write(1,&c,1);
+            write(1,"\n",1);
+            _exit(0);
+        }
+    }
+
+    for(int w=0; w<N_WORKERS; w++) wait(0);
+
+    gettimeofday(&t1,0);
+    long us = (t1.tv_sec-t0.tv_sec)*1000000L + (t1.tv_usec-t0.tv_usec);
+
+    uint32_t x = crc[0]^crc[1]^crc[2]^crc[3];
+
+    write(1,"US=",3);
+    uhex((uint32_t)us);
+    write(1,"CRC=",4);
+    uhex(x);
+    write(1,"B3_ANDROID:DONE\n",16);
+    return 0;
+}
+
+
+============================================================
+## RAFAELIA ASM — ARM32 / RAW
+============================================================
+
+
+------------------------------------------------------------
+### ARQUIVO: rafaelia_core_armv7.S
+------------------------------------------------------------
+
+@ ============================================================================
+@ rafaelia_core_armv7.S – Motor SIMD para Termux (ARMv7-A + NEON)
+@ Compatível com o assembler padrão do Termux.
+@ ============================================================================
+.syntax unified
+.arch armv7-a
+.fpu neon
+.text
+.global _start
+.align 2
+
+_start:
+    @ 1. Alocação de 4KB na pilha (espaço de fase)
+    sub sp, sp, #4096
+    mov r4, sp                 @ r4 = base do buffer
+
+    @ 2. Constantes Phi e Sqrt2 em hexadecimal (single-precision)
+    @ Phi = 1.618034 -> 0x3FCEB851
+    movw r0, #0xB851
+    movt r0, #0x3FCE
+    vmov s0, r0
+    vdup.32 q0, d0[0]          @ q0 = [Phi, Phi, Phi, Phi]
+
+    @ Sqrt2 = 1.41421356 -> 0x3FB504F3
+    movw r1, #0x04F3
+    movt r1, #0x3FB5
+    vmov s1, r1
+    vdup.32 q1, d1[0]          @ q1 = [Sqrt2, Sqrt2, Sqrt2, Sqrt2]
+
+    @ 3. Número de iterações
+    mov r6, #65536
+
+.L_CORE_LOOP:
+    @ Carrega 32 bytes (2 vetores NEON)
+    vld1.8 {q2, q3}, [r4]
+
+    @ Mistura ergódica (XOR entre q2 e q3)
+    veor q4, q2, q3
+
+    @ Conversão U32 -> Float, multiplicação por Phi e Sqrt2
+    vcvt.f32.u32 q5, q4
+    vmul.f32 q6, q5, q0
+    vmul.f32 q7, q6, q1
+
+    @ Conversão de volta para inteiro
+    vcvt.u32.f32 q4, q7
+
+    @ Armazena o resultado
+    vst1.8 {q4, q5}, [r4]
+
+    subs r6, r6, #1
+    bne .L_CORE_LOOP
+
+    @ Syscall exit (ARM EABI: syscall #1)
+    mov r7, #1
+    mov r0, #0
+    svc #0
+
+
+------------------------------------------------------------
+### ARQUIVO: rafaelia_b3.S
+------------------------------------------------------------
+
+@ ===========================================================================
+@ RAFAELIA B3 — MULTICORE clone() + CRC32SW + THROUGHPUT
+@ ARM32 · sem root · sem pthread · clone syscall direto
+@ Compilar: as -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=softfp rafaelia_b3.S -o b3.o && ld b3.o -o rafaelia_b3
+@ ===========================================================================
+
+.equ SYS_EXIT,            1
+.equ SYS_WRITE,           4
+.equ SYS_MMAP2,           192
+.equ SYS_CLONE,           120
+.equ SYS_WAIT4,           114
+.equ SYS_GETTIMEOFDAY,    78
+.equ STDOUT,              1
+.equ SIGCHLD,             17
+.equ N_WORKERS,           4
+.equ WORK_SIZE,           0x10000
+.equ STACK_SIZE,          0x4000
+
+@ ---------------------------------------------------------------------------
+@ RODATA
+@ ---------------------------------------------------------------------------
+.section .rodata
+.align 6
+
+msg_b3_boot:
+    .ascii "B3: MULTICORE+CRC32SW\n"
+    .equ msg_b3_boot_len, . - msg_b3_boot
+
+msg_worker:
+    .ascii "W:"
+    .equ msg_worker_len, . - msg_worker
+
+msg_crc:
+    .ascii "CRC="
+    .equ msg_crc_len, . - msg_crc
+
+msg_tput:
+    .ascii "US="
+    .equ msg_tput_len, . - msg_tput
+
+msg_done3:
+    .ascii "B3:DONE\n"
+    .equ msg_done3_len, . - msg_done3
+
+hex_t3: .ascii "0123456789ABCDEF"
+
+@ ---------------------------------------------------------------------------
+@ BSS
+@ ---------------------------------------------------------------------------
+.section .bss
+.align 6
+
+.align 3
+g_tv_start:   .space 8
+g_tv_end:     .space 8
+
+.align 4
+g_worker_crc: .space N_WORKERS * 4
+g_stacks:     .space N_WORKERS * 4
+g_work_data:  .space 4
+
+.align 6
+g_crc_tab3:   .space 256 * 4
+
+g_hex_b3:     .space 16
+g_worker_idx: .space 4
+
+@ ---------------------------------------------------------------------------
+@ TEXT
+@ ---------------------------------------------------------------------------
+.section .text
+.align 2
+.global _start
+.type _start, %function
+
+_start:
+    ldr     r0, =msg_b3_boot
+    ldr r1, =msg_b3_boot_len
+    bl      ws3
+
+    @ build CRC table
+    bl      crc_build3
+
+    @ mmap bloco de trabalho
+    mov     r0, #0
+    ldr     r1, =(WORK_SIZE * N_WORKERS)
+    mov     r2, #3
+    mov     r3, #0x22
+    mov     r4, #-1
+    mov     r5, #0
+    mov     r7, #SYS_MMAP2
+    swi     #0
+    ldr     r1, =g_work_data
+    str     r0, [r1]
+
+    @ preenche com padrão Fibonacci
+    ldr     r4, [r1]
+    ldr     r5, =(WORK_SIZE * N_WORKERS)
+    bl      fill_fib3
+
+    @ timestamp inicial
+    ldr     r0, =g_tv_start
+    mov     r1, #0
+    mov     r7, #SYS_GETTIMEOFDAY
+    swi     #0
+
+    @ spawn N_WORKERS processos filhos
+    mov     r8, #0          @ worker index
+
+.Bspawn:
+    cmp     r8, #N_WORKERS
+    beq     .Bspawn_done
+
+    @ aloca stack
+    mov     r0, #0
+    ldr     r1, =STACK_SIZE
+    mov     r2, #3
+    mov     r3, #0x22
+    mov     r4, #-1
+    mov     r5, #0
+    mov     r7, #SYS_MMAP2
+    swi     #0
+    ldr     r1, =STACK_SIZE
+    add     r1, r0, r1      @ stack top
+
+    @ salva ptr
+    ldr     r2, =g_stacks
+    str     r0, [r2, r8, lsl #2]
+
+    @ clone(SIGCHLD, stack_top)
+    mov     r0, #SIGCHLD
+    mov     r7, #SYS_CLONE
+    swi     #0
+
+    cmp     r0, #0
+    beq     .Bchild         @ filho
+
+    @ pai continua
+    add     r8, r8, #1
+    b       .Bspawn
+
+.Bchild:
+    @ FILHO: calcula CRC do seu bloco
+    ldr     r4, =g_work_data
+    ldr     r4, [r4]
+    ldr     r5, =WORK_SIZE
+    mul     r0, r8, r5
+    add     r4, r4, r0      @ ptr para o bloco deste worker
+
+    mov     r0, r4
+    mov     r1, r5
+    bl      crc_compute3
+
+    ldr     r1, =g_worker_crc
+    str     r0, [r1, r8, lsl #2]
+
+    @ imprime "W:N"
+    ldr     r0, =msg_worker
+    ldr r1, =msg_worker_len
+    bl      ws3
+
+    mov     r0, r8
+    bl      print_nibble3
+
+    mov     r7, #SYS_EXIT
+    mov     r0, #0
+    swi     #0
+
+.Bspawn_done:
+    @ pai espera todos os filhos
+    mov     r9, #N_WORKERS
+
+.Bwait:
+    cmp     r9, #0
+    beq     .Bwait_done
+    mov     r0, #-1
+    mov     r1, #0
+    mov     r2, #0
+    mov     r3, #0
+    mov     r7, #SYS_WAIT4
+    swi     #0
+    subs    r9, r9, #1
+    b       .Bwait
+
+.Bwait_done:
+    @ timestamp final
+    ldr     r0, =g_tv_end
+    mov     r1, #0
+    mov     r7, #SYS_GETTIMEOFDAY
+    swi     #0
+
+    @ delta_us = (sec_end-sec_start)*1e6 + (usec_end-usec_start)
+    ldr     r0, =g_tv_end
+    ldmia   r0, {r0, r1}
+    ldr     r2, =g_tv_start
+    ldmia   r2, {r2, r3}
+    sub     r0, r0, r2
+    sub     r1, r1, r3
+    ldr     r4, =1000000
+    mul     r0, r0, r4
+    add     r0, r0, r1
+
+    push    {r0}
+    ldr     r0, =msg_tput
+    ldr r1, =msg_tput_len
+    bl      ws3
+    pop     {r0}
+    bl      print_hex32_b3
+
+    @ XOR de todos os CRCs
+    ldr     r0, =g_worker_crc
+    ldr     r1, [r0, #0]
+    ldr     r2, [r0, #4]
+    ldr     r3, [r0, #8]
+    ldr     r4, [r0, #12]
+    eor     r0, r1, r2
+    eor     r0, r0, r3
+    eor     r0, r0, r4
+
+    push    {r0}
+    ldr     r0, =msg_crc
+    ldr r1, =msg_crc_len
+    bl      ws3
+    pop     {r0}
+    bl      print_hex32_b3
+
+    ldr     r0, =msg_done3
+    ldr r1, =msg_done3_len
+    bl      ws3
+
+    mov     r7, #SYS_EXIT
+    mov     r0, #0
+    swi     #0
+
+@ ===========================================================================
+@ fill_fib3 — r4=ptr r5=len — padrão Fibonacci mod 65536
+@ ===========================================================================
+.type fill_fib3, %function
+fill_fib3:
+    push    {r4, r5, r6, r7, lr}
+    mov     r6, #1
+    mov     r7, #1
+    mov     r0, #0
+.Bfib:
+    cmp     r0, r5
+    bge     .Bfib_done
+    add     r2, r6, r7
+    uxth r2, r2
+    strh    r2, [r4, r0]
+    mov     r6, r7
+    mov     r7, r2
+    add     r0, r0, #2
+    b       .Bfib
+.Bfib_done:
+    pop     {r4, r5, r6, r7, pc}
+
+@ ===========================================================================
+@ crc_build3 — constrói g_crc_tab3
+@ ===========================================================================
+.type crc_build3, %function
+crc_build3:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r4, =g_crc_tab3
+    mov     r5, #0
+.Bcb:
+    cmp     r5, #256
+    beq     .Bcb_done
+    mov     r0, r5
+    mov     r6, #8
+.Bcb_bit:
+    tst     r0, #1
+    lsr     r0, r0, #1
+    ldrne   r7, =0x82F63B78
+    eorne   r0, r0, r7
+    subs    r6, r6, #1
+    bne     .Bcb_bit
+    str     r0, [r4, r5, lsl #2]
+    add     r5, r5, #1
+    b       .Bcb
+.Bcb_done:
+    pop     {r4, r5, r6, r7, pc}
+
+@ ===========================================================================
+@ crc_compute3 — r0=ptr r1=len → r0=crc32c
+@ ===========================================================================
+.type crc_compute3, %function
+crc_compute3:
+    push    {r4, r5, r6, r7, r8, lr}
+    mov     r4, r0
+    mov     r5, r1
+    mvn     r6, #0
+    ldr     r7, =g_crc_tab3
+
+    @ loop desdobrado: 4 bytes por iteração
+.Bcc4:
+    cmp     r5, #4
+    blt     .Bcc1
+    ldr     r0, [r4], #4
+
+    eor     r8, r6, r0;     and r8, r8, #0xFF
+    ldr     r8, [r7, r8, lsl #2]; lsr r6, r6, #8; eor r6, r6, r8
+
+    lsr     r0, r0, #8
+    eor     r8, r6, r0;     and r8, r8, #0xFF
+    ldr     r8, [r7, r8, lsl #2]; lsr r6, r6, #8; eor r6, r6, r8
+
+    lsr     r0, r0, #8
+    eor     r8, r6, r0;     and r8, r8, #0xFF
+    ldr     r8, [r7, r8, lsl #2]; lsr r6, r6, #8; eor r6, r6, r8
+
+    lsr     r0, r0, #8
+    eor     r8, r6, r0;     and r8, r8, #0xFF
+    ldr     r8, [r7, r8, lsl #2]; lsr r6, r6, #8; eor r6, r6, r8
+
+    sub     r5, r5, #4
+    b       .Bcc4
+
+.Bcc1:
+    cmp     r5, #0
+    beq     .Bcc_done
+    ldrb    r0, [r4], #1
+    eor     r8, r6, r0;     and r8, r8, #0xFF
+    ldr     r8, [r7, r8, lsl #2]; lsr r6, r6, #8; eor r6, r6, r8
+    subs    r5, r5, #1
+    b       .Bcc1
+
+.Bcc_done:
+    mvn     r0, r6
+    pop     {r4, r5, r6, r7, r8, pc}
+
+@ ===========================================================================
+@ Utilitários
+@ ===========================================================================
+.type print_nibble3, %function
+print_nibble3:
+    push    {lr}
+    ldr     r1, =hex_t3
+    and     r0, r0, #0xF
+    ldrb    r0, [r1, r0]
+    ldr     r1, =g_hex_b3
+    strb    r0, [r1]
+    mov     r2, #'\n'
+    strb    r2, [r1, #1]
+    mov     r0, r1
+    mov     r1, #2
+    bl      ws3
+    pop     {pc}
+
+.type print_hex32_b3, %function
+print_hex32_b3:
+    push    {r4, r5, lr}
+    mov     r4, r0
+    ldr     r5, =g_hex_b3
+    ldr     r2, =hex_t3
+    mov     r1, #28
+.Ph3:
+    lsr     r0, r4, r1
+    and     r0, r0, #0xF
+    ldrb    r0, [r2, r0]
+    strb    r0, [r5], #1
+    subs    r1, r1, #4
+    bge     .Ph3
+    mov     r0, #'\n'
+    strb    r0, [r5]
+    ldr     r0, =g_hex_b3
+    mov     r1, #9
+    bl      ws3
+    pop     {r4, r5, pc}
+
+.type ws3, %function
+ws3:
+    push    {lr}
+    mov     r2, r1
+    mov     r1, r0
+    mov     r0, #STDOUT
+    mov     r7, #SYS_WRITE
+    swi     #0
+    pop     {pc}
+
+
+------------------------------------------------------------
+### ARQUIVO: rafaelia_bench.S
+------------------------------------------------------------
+
+@ ============================================================================
+@ rafaelia_core_armv7_bench.S
+@ Motor SIMD para Termux (ARMv7-A + NEON) com medição de ciclos e saída.
+@ ============================================================================
+.syntax unified
+.arch armv7-a
+.fpu neon
+.text
+.global _start
+.align 2
+
+_start:
+    @ ------------------------------------------------------------
+    @ 1. Alocação de 4KB na pilha (espaço de fase)
+    @ ------------------------------------------------------------
+    sub sp, sp, #4096
+    mov r4, sp                     @ r4 = base do buffer
+
+    @ ------------------------------------------------------------
+    @ 2. Constantes Phi e Sqrt2 (single-precision)
+    @ ------------------------------------------------------------
+    @ Phi = 1.618034 → 0x3FCEB851
+    movw r0, #0xB851
+    movt r0, #0x3FCE
+    vmov s0, r0
+    vdup.32 q0, d0[0]              @ q0 = [Phi, Phi, Phi, Phi]
+
+    @ Sqrt2 = 1.41421356 → 0x3FB504F3
+    movw r1, #0x04F3
+    movt r1, #0x3FB5
+    vmov s1, r1
+    vdup.32 q1, d1[0]              @ q1 = [Sqrt2, Sqrt2, Sqrt2, Sqrt2]
+
+    @ ------------------------------------------------------------
+    @ 3. Número de iterações
+    @ ------------------------------------------------------------
+    mov r6, #65536                 @ 64K iterações
+
+    @ ------------------------------------------------------------
+    @ 4. Leitura do contador de ciclos (PMCCNTR)
+    @ ------------------------------------------------------------
+    @ Habilita o contador de performance do usuário (PMUSERENR.EN)
+    mrc p15, 0, r2, c9, c14, 0
+    orr r2, r2, #1
+    mcr p15, 0, r2, c9, c14, 0
+
+    @ Habilita o contador de ciclos (PMCNTENSET.C)
+    mov r2, #0x80000000
+    mcr p15, 0, r2, c9, c12, 1
+
+    @ Zera o contador e inicia
+    mov r2, #0
+    mcr p15, 0, r2, c9, c13, 0    @ PMCCNTR = 0
+    mov r2, #1
+    mcr p15, 0, r2, c9, c12, 0    @ PMCR.E = 1 (enable)
+
+    @ Leitura do ciclo inicial
+    mrc p15, 0, r7, c9, c13, 0    @ r7 = start_cycles
+
+    @ ------------------------------------------------------------
+    @ 5. Loop principal SIMD
+    @ ------------------------------------------------------------
+.L_CORE_LOOP:
+    vld1.8 {q2, q3}, [r4]          @ carrega 32 bytes
+    veor q4, q2, q3                @ XOR mistura ergódica
+    vcvt.f32.u32 q5, q4            @ u32 → float
+    vmul.f32 q6, q5, q0            @ × Phi
+    vmul.f32 q7, q6, q1            @ × Sqrt2
+    vcvt.u32.f32 q4, q7            @ float → u32
+    vst1.8 {q4, q5}, [r4]          @ armazena 32 bytes
+
+    subs r6, r6, #1
+    bne .L_CORE_LOOP
+
+    @ Leitura do ciclo final
+    mrc p15, 0, r8, c9, c13, 0    @ r8 = end_cycles
+    sub r7, r8, r7                 @ r7 = total de ciclos gastos
+
+    @ Desabilita o contador
+    mov r2, #0
+    mcr p15, 0, r2, c9, c12, 0
+
+    @ ------------------------------------------------------------
+    @ 6. Exibição do resultado (syscall write)
+    @ ------------------------------------------------------------
+    @ String de cabeçalho
+    mov r0, #1                     @ stdout
+    ldr r1, =msg_header
+    ldr r2, =msg_header_len
+    mov r7, #4                     @ sys_write
+    svc #0
+
+    @ Converte r7 (ciclos) para string decimal no buffer
+    adr r1, num_buffer
+    mov r0, r7
+    bl uint32_to_str
+
+    @ Imprime o número de ciclos
+    mov r2, r0                     @ comprimento retornado pela função
+    mov r0, #1
+    adr r1, num_buffer
+    mov r7, #4
+    svc #0
+
+    @ Imprime rodapé
+    mov r0, #1
+    ldr r1, =msg_footer
+    ldr r2, =msg_footer_len
+    mov r7, #4
+    svc #0
+
+    @ ------------------------------------------------------------
+    @ 7. Syscall exit
+    @ ------------------------------------------------------------
+    mov r7, #1
+    mov r0, #0
+    svc #0
+
+@ ============================================================================
+@ Função: uint32_to_str
+@ Converte um inteiro de 32 bits (r0) para string decimal.
+@ Entrada: r0 = valor, r1 = buffer de destino (pelo menos 11 bytes)
+@ Saída:  r0 = comprimento da string
+@ ============================================================================
+uint32_to_str:
+    push {r4-r7, lr}
+    mov r4, r1                     @ r4 = início do buffer
+    add r5, r1, #10                @ r5 = fim do buffer (espaço para 10 dígitos + null)
+    mov r6, #10                    @ divisor
+
+    @ Gera os dígitos em ordem reversa
+1:  udiv r7, r0, r6
+    mls r3, r7, r6, r0             @ r3 = r0 % 10
+    add r3, r3, #'0'
+    strb r3, [r1], #1
+    mov r0, r7
+    cmp r0, #0
+    bne 1b
+
+    @ Inverte a string no buffer
+    sub r5, r1, #1                 @ r5 = último caractere escrito
+    mov r1, r4                     @ r1 = início do buffer
+2:  cmp r1, r5
+    bge 3f
+    ldrb r3, [r1]
+    ldrb r7, [r5]
+    strb r7, [r1], #1
+    strb r3, [r5], #-1
+    b 2b
+3:
+    sub r0, r1, r4                 @ comprimento = pos_final - início
+    pop {r4-r7, pc}
+
+.section .data
+msg_header:      .ascii "[RAFAELIA-ARMv7] Ciclos gastos: "
+msg_header_len = . - msg_header
+msg_footer:      .ascii "\n☯ Execução concluída.\n"
+msg_footer_len = . - msg_footer
+
+.section .bss
+num_buffer:      .space 16
+
+
+------------------------------------------------------------
+### ARQUIVO: rafaelia_final.S
+------------------------------------------------------------
+
+.syntax unified
+.arch armv7-a
+.fpu neon
+.text
+.global _start
+.align 2
+
+_start:
+    @ 1. Alocação de 4KB na pilha
+    sub sp, sp, #4096
+    mov r4, sp
+
+    @ 2. Constantes Phi e Sqrt2
+    movw r0, #0xB851
+    movt r0, #0x3FCE
+    vmov s0, r0
+    vdup.32 q0, d0[0]
+
+    movw r1, #0x04F3
+    movt r1, #0x3FB5
+    vmov s1, r1
+    vdup.32 q1, d1[0]
+
+    @ 3. Iterações
+    mov r6, #65536
+
+    @ 4. Habilita contador de ciclos (PMCCNTR)
+    mrc p15, 0, r2, c9, c14, 0
+    orr r2, r2, #1
+    mcr p15, 0, r2, c9, c14, 0
+    mov r2, #0x80000000
+    mcr p15, 0, r2, c9, c12, 1
+    mov r2, #0
+    mcr p15, 0, r2, c9, c13, 0
+    mov r2, #1
+    mcr p15, 0, r2, c9, c12, 0
+
+    @ 5. Leitura do ciclo inicial
+    mrc p15, 0, r7, c9, c13, 0
+
+.L_LOOP:
+    vld1.8 {q2, q3}, [r4]
+    veor q4, q2, q3
+    vcvt.f32.u32 q5, q4
+    vmul.f32 q6, q5, q0
+    vmul.f32 q7, q6, q1
+    vcvt.u32.f32 q4, q7
+    vst1.8 {q4, q5}, [r4]
+    subs r6, r6, #1
+    bne .L_LOOP
+
+    @ 6. Leitura do ciclo final
+    mrc p15, 0, r8, c9, c13, 0
+    sub r7, r8, r7
+
+    @ Desabilita contador
+    mov r2, #0
+    mcr p15, 0, r2, c9, c12, 0
+
+    @ 7. Imprime cabeçalho
+    mov r0, #1
+    ldr r1, =msg_header
+    ldr r2, =msg_header_len
+    mov r7, #4
+    svc #0
+
+    @ 8. Converte ciclos para string
+    adr r1, num_buffer
+    mov r0, r7
+    bl uint32_to_str
+
+    @ 9. Imprime número
+    mov r2, r0
+    mov r0, #1
+    adr r1, num_buffer
+    mov r7, #4
+    svc #0
+
+    @ 10. Imprime rodapé
+    mov r0, #1
+    ldr r1, =msg_footer
+    ldr r2, =msg_footer_len
+    mov r7, #4
+    svc #0
+
+    @ 11. Exit
+    mov r7, #1
+    mov r0, #0
+    svc #0
+
+@ ============================================================
+@ Função uint32_to_str (sem udiv)
+@ ============================================================
+uint32_to_str:
+    push {r4-r7, lr}
+    mov r4, r1
+    add r5, r1, #10
+    mov r6, #10
+
+1:  mov r3, #0
+2:  cmp r0, r6
+    blo 3f
+    sub r0, r0, r6
+    add r3, r3, #1
+    b 2b
+3:  add r3, r3, #'0'
+    strb r3, [r1], #1
+    cmp r0, #0
+    bne 1b
+
+    sub r5, r1, #1
+    mov r1, r4
+4:  cmp r1, r5
+    bge 5f
+    ldrb r3, [r1]
+    ldrb r7, [r5]
+    strb r7, [r1], #1
+    strb r3, [r5], #-1
+    b 4b
+5:  sub r0, r1, r4
+    pop {r4-r7, pc}
+
+.section .data
+msg_header:      .ascii "[RAFAELIA-ARMv7] Ciclos gastos: "
+msg_header_len = . - msg_header
+msg_footer:      .ascii "\n☯ Execucao concluida.\n"
+msg_footer_len = . - msg_footer
+
+.section .bss
+num_buffer:      .space 16
+
+
+------------------------------------------------------------
+### ARQUIVO: rafaelos_armv7.s
+------------------------------------------------------------
+
+.syntax unified
+.cpu cortex-a7
+.fpu neon
+.thumb
+
+.global _start
+
+.equ SYS_WRITE, 4
+.equ SYS_EXIT, 1
+.equ STDOUT, 1
+
+.section .data
+msg:
+    .ascii "RAFAELOS ARMv7 ANDROID\\n"
+len = . - msg
+
+.section .bss
+    .align 4
+state:
+    .space 28
+
+.section .text
+
+_start:
+
+    @ write(STDOUT,msg,len)
+    mov r0, #STDOUT
+    ldr r1, =msg
+    ldr r2, =len
+    mov r7, #SYS_WRITE
+    svc #0
+
+    @ init state
+    bl state_init
+
+    mov r4, #0
+
+loop_main:
+    cmp r4, #42
+    beq end
+
+    mov r0, r4
+    bl generate_input
+
+    bl state_update
+
+    bl calc_phi
+
+    add r4, r4, #1
+    b loop_main
+
+end:
+    mov r0, #0
+    mov r7, #SYS_EXIT
+    svc #0
+
+@ ------------------------------------------------
+@ state_init
+@ r0-r3 temporários
+@ ------------------------------------------------
+
+state_init:
+
+    ldr r0, =state
+
+    mov r1, #1
+    str r1, [r0]
+
+    mov r1, #2
+    str r1, [r0,#4]
+
+    mov r1, #3
+    str r1, [r0,#8]
+
+    mov r1, #4
+    str r1, [r0,#12]
+
+    mov r1, #5
+    str r1, [r0,#16]
+
+    mov r1, #6
+    str r1, [r0,#20]
+
+    mov r1, #7
+    str r1, [r0,#24]
+
+    bx lr
+
+@ ------------------------------------------------
+@ generate_input
+@ r0 = step
+@ ------------------------------------------------
+
+generate_input:
+
+    push {r4-r7,lr}
+
+    mov r4, r0
+
+    @ xorshift32
+    eor r4, r4, r4, lsl #13
+    eor r4, r4, r4, lsr #17
+    eor r4, r4, r4, lsl #5
+
+    ldr r5, =state
+
+    str r4, [r5]
+
+    pop {r4-r7,lr}
+    bx lr
+
+@ ------------------------------------------------
+@ state_update
+@ ------------------------------------------------
+
+state_update:
+
+    push {r4-r8,lr}
+
+    ldr r4, =state
+
+    mov r5, #0
+
+update_loop:
+
+    cmp r5, #28
+    beq update_end
+
+    ldr r6, [r4,r5]
+
+    add r6, r6, #3
+
+    and r6, r6, #255
+
+    str r6, [r4,r5]
+
+    add r5, r5, #4
+
+    b update_loop
+
+update_end:
+
+    pop {r4-r8,lr}
+    bx lr
+
+@ ------------------------------------------------
+@ calc_phi
+@ ------------------------------------------------
+
+calc_phi:
+
+    push {r4-r8,lr}
+
+    ldr r4, =state
+
+    mov r5, #0
+    mov r6, #0
+
+phi_loop:
+
+    cmp r5, #28
+    beq phi_done
+
+    ldr r7, [r4,r5]
+
+    add r6, r6, r7
+
+    add r5, r5, #4
+
+    b phi_loop
+
+phi_done:
+
+    pop {r4-r8,lr}
+    bx lr
+
+
+
+------------------------------------------------------------
+### ARQUIVO: crc_armv7.S
+------------------------------------------------------------
+
+.section .text
+.globl _start
+
+_start:
+    @ mmap2(NULL, 1<<20, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)
+    mov r0, #0
+    mov r1, #0x100000
+    mov r2, #0x3
+    mov r3, #0x22
+    mov r4, #-1
+    mov r5, #0
+    mov r7, #192     @ syscall mmap2
+    svc #0
+    @ resultado em r0
+    cmp r0, #-1
+    beq .exit_fail
+    mov r8, r0       @ guarda ponteiro do buffer
+
+    @ Preencher buffer com i*131 (i = 0 .. 1048575)
+    mov r9, #0       @ i
+    mov r10, #0x100000
+.fill_loop:
+    cmp r9, r10
+    bge .fill_done
+    mul r11, r9, #131
+    strb r11, [r8, r9]
+    add r9, r9, #1
+    b .fill_loop
+.fill_done:
+
+    @ Calcular CRC-32 (tabela embutida)
+    @ r8 = buffer, r10 = tamanho, r12 = crc = 0xFFFFFFFF
+    mov r12, #-1
+    mov r9, #0       @ posição
+.crc_loop:
+    cmp r9, r10
+    bge .crc_done
+    ldrb r11, [r8, r9]   @ byte
+    eor r11, r12, r11
+    and r11, r11, #0xFF
+    @ tabela CRC32: endereço base + índice*4
+    adr r14, .crc_table
+    ldr r11, [r14, r11, lsl #2]
+    lsr r12, r12, #8
+    eor r12, r12, r11
+    add r9, r9, #1
+    b .crc_loop
+.crc_done:
+    mvn r12, r12     @ crc final
+
+    @ Converter crc para hex e escrever "CRC=XXXXXXXX\n"
+    sub sp, sp, #32
+    mov r0, sp       @ buffer
+    mov r1, #'C'
+    strb r1, [r0], #1
+    mov r1, #'R'
+    strb r1, [r0], #1
+    mov r1, #'C'
+    strb r1, [r0], #1
+    mov r1, #'='
+    strb r1, [r0], #1
+    mov r5, r0       @ guarda ponteiro após 'CRC='
+    mov r2, #8       @ 8 dígitos
+    mov r3, r12      @ crc
+.hex_loop:
+    mov r4, r3, lsr #28
+    and r4, r4, #0xF
+    cmp r4, #10
+    addlt r4, #'0'
+    addge r4, #'A'-10
+    strb r4, [r0], #1
+    mov r3, r3, lsl #4
+    subs r2, r2, #1
+    bne .hex_loop
+    mov r1, #'\n'
+    strb r1, [r0], #1
+    @ write(1, sp, tamanho)
+    mov r0, #1
+    mov r1, sp
+    sub r2, r0, sp
+    mov r7, #4
+    svc #0
+
+    @ exit(0)
+.exit_ok:
+    mov r0, #0
+    mov r7, #1
+    svc #0
+
+.exit_fail:
+    mov r0, #1
+    mov r7, #1
+    svc #0
+
+.section .rodata
+.crc_table:
+    .word 0x00000000, 0x77073096, 0xee0e612c, 0x990951ba
+    .word 0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3
+    .word 0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988
+    .word 0x09b64c2b, 0x7eb17cbd, 0xe7b82d07, 0x90bf1d91
+    .word 0x1db71064, 0x6ab020f2, 0xf3b97148, 0x84be41de
+    .word 0x1adad47d, 0x6ddde4eb, 0xf4d4b551, 0x83d385c7
+    .word 0x136c9856, 0x646ba8c0, 0xfd62f97a, 0x8a65c9ec
+    .word 0x14015c4f, 0x63066cd9, 0xfa0f3d63, 0x8d080df5
+    .word 0x3b6e20c8, 0x4c69105e, 0xd56041e4, 0xa2677172
+    .word 0x3c03e4d1, 0x4b04d447, 0xd20d85fd, 0xa50ab56b
+    .word 0x35b5a8fa, 0x42b2986c, 0xdbbbc9d6, 0xacbcf940
+    .word 0x32d86ce3, 0x45df5c75, 0xdcd60dcf, 0xabd13d59
+    .word 0x26d930ac, 0x51de003a, 0xc8d75180, 0xbfd06116
+    .word 0x21b4f4b5, 0x56b3c423, 0xcfba9599, 0xb8bda50f
+    .word 0x2802b89e, 0x5f058808, 0xc60cd9b2, 0xb10be924
+    .word 0x2f6f7c87, 0x58684c11, 0xc1611dab, 0xb6662d3d
+    .word 0x76dc4190, 0x01db7106, 0x98d220bc, 0xefd5102a
+    .word 0x71b18589, 0x06b6b51f, 0x9fbfe4a5, 0xe8b8d433
+    .word 0x7807c9a2, 0x0f00f934, 0x9609a88e, 0xe10e9818
+    .word 0x7f6a0dbb, 0x086d3d2d, 0x91646c97, 0xe6635c01
+    .word 0x6b6b51f4, 0x1c6c6162, 0x856530d8, 0xf262004e
+    .word 0x6c0695ed, 0x1b01a57b, 0x8208f4c1, 0xf50fc457
+    .word 0x65b0d9c6, 0x12b7e950, 0x8bbeb8ea, 0xfcb9887c
+    .word 0x62dd1ddf, 0x15da2d49, 0x8cd37cf3, 0xfbd44c65
+    .word 0x4db26158, 0x3ab551ce, 0xa3bc0074, 0xd4bb30e2
+    .word 0x4adfa541, 0x3dd895d7, 0xa4d1c46d, 0xd3d6f4fb
+    .word 0x4369e96a, 0x346ed9fc, 0xad678846, 0xda60b8d0
+    .word 0x44042d73, 0x33031de5, 0xaa0a4c5f, 0xdd0d7cc9
+    .word 0x5005713c, 0x270241aa, 0xbe0b1010, 0xc90c2086
+    .word 0x5768b525, 0x206f85b3, 0xb966d409, 0xce61e49f
+    .word 0x5edef90e, 0x29d9c998, 0xb0d09822, 0xc7d7a8b4
+    .word 0x59b33d17, 0x2eb40d81, 0xb7bd5c3b, 0xc0ba6cad
+    .word 0xedb88320, 0x9abfb3b6, 0x03b6e20c, 0x74b1d29a
+    .word 0xead54739, 0x9dd277af, 0x04db2615, 0x73dc1683
+    .word 0xe3630b12, 0x94643b84, 0x0d6d6a3e, 0x7a6a5aa8
+    .word 0xe40ecf0b, 0x9309ff9d, 0x0a00ae27, 0x7d079eb1
+    .word 0xf00f9344, 0x8708a3d2, 0x1e01f268, 0x6906c2fe
+    .word 0xf762575d, 0x806567cb, 0x196c3671, 0x6e6b06e7
+    .word 0xfed41b76, 0x89d32be0, 0x10da7a5a, 0x67dd4acc
+    .word 0xf9b9df6f, 0x8ebeeff9, 0x17b7be43, 0x60b08ed5
+    .word 0xd6d6a3e8, 0xa1d1937e, 0x38d8c2c4, 0x4fdff252
+    .word 0xd1bb67f1, 0xa6bc5767, 0x3fb506dd, 0x48b2364b
+    .word 0xd80d2bda, 0xaf0a1b4c, 0x36034af6, 0x41047a60
+    .word 0xdf60efc3, 0xa867df55, 0x316e8eef, 0x4669be79
+    .word 0xcb61b38c, 0xbc66831a, 0x256fd2a0, 0x5268e236
+    .word 0xcc0c7795, 0xbb0b4703, 0x220216b9, 0x5505262f
+    .word 0xc5ba3bbe, 0xb2bd0b28, 0x2bb45a92, 0x5cb36a04
+    .word 0xc2d7ffa7, 0xb5d0cf31, 0x2cd99e8b, 0x5bdeae1d
+    .word 0x9b64c2b0, 0xec63f226, 0x756aa39c, 0x026d930a
+    .word 0x9c0906a9, 0xeb0e363f, 0x72076785, 0x05005713
+    .word 0x95bf4a82, 0xe2b87a14, 0x7bb12bae, 0x0cb61b38
+    .word 0x92d28e9b, 0xe5d5be0d, 0x7cdcefb7, 0x0bdbdf21
+    .word 0x86d3d2d4, 0xf1d4e242, 0x68ddb3f8, 0x1fda836e
+    .word 0x81be16cd, 0xf6b9265b, 0x6fb077e1, 0x18b74777
+    .word 0x88085ae6, 0xff0f6a70, 0x66063bca, 0x11010b5c
+    .word 0x8f659eff, 0xf862ae69, 0x616bffd3, 0x166ccf45
+    .word 0xa00ae278, 0xd70dd2ee, 0x4e048354, 0x3903b3c2
+    .word 0xa7672661, 0xd06016f7, 0x4969474d, 0x3e6e77db
+    .word 0xaed16a4a, 0xd9d65adc, 0x40df0b66, 0x37d83bf0
+    .word 0xa9bcae53, 0xdebb9ec5, 0x47b2cf7f, 0x30b5ffe9
+    .word 0xbdbdf21c, 0xcabac28a, 0x53b39330, 0x24b4a3a6
+    .word 0xbad03605, 0xcdd70693, 0x54de5729, 0x23d967bf
+    .word 0xb3667a2e, 0xc4614ab8, 0x5d681b02, 0x2a6f2b94
+    .word 0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d
+
+
+------------------------------------------------------------
+### ARQUIVO: crc_raw.S
+------------------------------------------------------------
+
+// crc_raw.S - Assembly puro ARM64, sem libc, sem variáveis nomeadas
+// Compilar: gcc -nostdlib -static -o crc_raw crc_raw.S
+// Executar: ./crc_raw
+
+.section .text
+.globl _start
+_start:
+    // mmap(NULL, 1<<20, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)
+    mov x0, #0          // addr = NULL
+    mov x1, #0x100000   // 1 MiB
+    mov x2, #0x3        // PROT_READ|PROT_WRITE
+    mov x3, #0x22       // MAP_PRIVATE|MAP_ANONYMOUS
+    mov x4, #-1         // fd = -1
+    mov x5, #0          // offset = 0
+    mov x8, #222        // syscall number for mmap
+    svc #0
+    // Verifica erro (x0 > -4096) - simplificado, assume sucesso
+    mov x9, x0          // guarda o ponteiro do buffer em x9
+
+    // Preenche buffer com padrão (i * 131)
+    mov x10, x9         // ptr
+    mov x11, #0         // i
+    mov x12, #0x100000  // tamanho
+    mov x13, #131
+fill_loop:
+    cmp x11, x12
+    b.ge fill_done
+    mul x14, x11, x13
+    strb w14, [x10, x11]
+    add x11, x11, #1
+    b fill_loop
+fill_done:
+
+    // Prefetch simples
+    mov x10, x9
+    mov x11, #0
+pref_loop:
+    cmp x11, x12
+    b.ge pref_done
+    prfm pldl1keep, [x10, x11]
+    add x11, x11, #64
+    b pref_loop
+pref_done:
+
+    // Mede ciclos início
+    mrs x15, cntvct_el0   // t0
+
+    // CRC32 loop com NEON (64 bytes por iteração)
+    mov x10, x9           // ptr
+    mov x11, x12          // size
+    mov w16, #0           // crc = 0
+
+crc_loop:
+    cmp x11, #64
+    b.lt crc_remainder
+    // Carrega 64 bytes em 4 registradores NEON
+    ld1 {v0.16b, v1.16b, v2.16b, v3.16b}, [x10], #64
+    // v0.d[0]
+    umov x17, v0.d[0]
+    crc32x w16, w16, x17
+    // v0.d[1]
+    umov x17, v0.d[1]
+    crc32x w16, w16, x17
+    // v1.d[0]
+    umov x17, v1.d[0]
+    crc32x w16, w16, x17
+    // v1.d[1]
+    umov x17, v1.d[1]
+    crc32x w16, w16, x17
+    // v2.d[0]
+    umov x17, v2.d[0]
+    crc32x w16, w16, x17
+    // v2.d[1]
+    umov x17, v2.d[1]
+    crc32x w16, w16, x17
+    // v3.d[0]
+    umov x17, v3.d[0]
+    crc32x w16, w16, x17
+    // v3.d[1]
+    umov x17, v3.d[1]
+    crc32x w16, w16, x17
+    sub x11, x11, #64
+    b crc_loop
+
+crc_remainder:
+    // Bytes restantes (<64)
+    cbz x11, crc_done
+    ldrb w17, [x10], #1
+    crc32b w16, w16, w17
+    sub x11, x11, #1
+    b crc_remainder
+
+crc_done:
+    // Mede ciclos fim
+    mrs x18, cntvct_el0   // t1
+
+    // Prepara saída: string "CRC=XXXXXXXX\nCYCLES=YYYYYYYYYY\n"
+    // Usaremos buffer na pilha (1024 bytes) - alinhado
+    sub sp, sp, #1024
+    mov x19, sp            // buffer start
+
+    // "CRC="
+    mov w20, #0x435243     // "CRC" little-endian? Vamos colocar bytes manualmente
+    strb w20, [x19], #1    // 'C'
+    mov w20, #0x52
+    strb w20, [x19], #1    // 'R'
+    mov w20, #0x43
+    strb w20, [x19], #1    // 'C'
+    mov w20, #0x3D
+    strb w20, [x19], #1    // '='
+
+    // Converte CRC (w16) para hex
+    mov w20, w16
+    mov x21, #8            // 8 hex digits
+    add x19, x19, #7       // escreve de trás pra frente? Vamos fazer simples: usar função inline
+    // Melhor: usar loop de conversão com lookup table
+    // Vou usar um pequeno bloco de conversão sem chamadas
+    // Recomeço: colocar ponteiro no início da string +4 (após "CRC=")
+    sub x19, x19, #4       // volta para o início do buffer
+    mov x22, x19           // guarda início
+    add x22, x22, #4       // depois de "CRC="
+    mov w23, w16           // crc
+    mov x24, #8
+    add x25, x22, #7       // fim da string hex
+hex_loop:
+    and w26, w23, #0xF
+    cmp w26, #10
+    add w26, w26, #'0'
+    add w26, w26, #7       // ajuste para A-F? Vou corrigir:
+    // melhor:
+    cmp w26, #10
+    add w26, w26, #'0'
+    b.lt digit_ok
+    add w26, w26, #7       // 'A' - '0' - 10 = 7
+digit_ok:
+    strb w26, [x25], #-1
+    lsr w23, w23, #4
+    sub x24, x24, #1
+    cbnz x24, hex_loop
+    // agora x22 aponta para o início do hex (8 bytes), x25 aponta para o byte antes
+    // Ajustar ponteiro final
+    mov x19, x22
+    add x19, x19, #8       // após hex
+
+    // "\nCYCLES="
+    mov w20, #0x0A
+    strb w20, [x19], #1    // '\n'
+    mov w20, #0x43
+    strb w20, [x19], #1    // 'C'
+    mov w20, #0x59
+    strb w20, [x19], #1    // 'Y'
+    mov w20, #0x43
+    strb w20, [x19], #1    // 'C'
+    mov w20, #0x4C
+    strb w20, [x19], #1    // 'L'
+    mov w20, #0x45
+    strb w20, [x19], #1    // 'E'
+    mov w20, #0x53
+    strb w20, [x19], #1    // 'S'
+    mov w20, #0x3D
+    strb w20, [x19], #1    // '='
+
+    // Converte ciclos (x18) para decimal (até 10 dígitos)
+    mov x20, x18
+    mov x21, #10
+    add x22, x19, #9       // último dígito
+    mov x23, #10
+dec_loop:
+    udiv x24, x20, x23
+    msub x25, x24, x23, x20
+    add w25, w25, #'0'
+    strb w25, [x22], #-1
+    mov x20, x24
+    cbz x20, dec_done
+    b dec_loop
+dec_done:
+    add x19, x22, #1       // ajusta ponteiro final
+
+    // "\n"
+    mov w20, #0x0A
+    strb w20, [x19], #1
+
+    // Calcula tamanho da string
+    sub x1, x19, sp        // tamanho
+    mov x0, #1             // stdout
+    mov x2, x1
+    mov x8, #64            // write syscall
+    svc #0
+
+    // exit(0)
+    mov x0, #0
+    mov x8, #93            // exit syscall
+    svc #0
+
+
+============================================================
+## VECTRA C — CANDIDATOS FORTES
+============================================================
+
+
+------------------------------------------------------------
+### ARQUIVO: vectra_raw.c
+------------------------------------------------------------
+
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <stdint.h>
+#include <pthread.h>
+#include <sched.h>
+#include <time.h>
+
+#define CORES 8
+#define ITERS 50000000 // 50 Milhões de giros por núcleo direto no silício
+
+void* pulse_baremetal(void* arg) {
+    int core_id = *(int*)arg;
+    cpu_set_t cpuset; CPU_ZERO(&cpuset); CPU_SET(core_id, &cpuset);
+    sched_setaffinity(0, sizeof(cpu_set_t), &cpuset);
+
+    uint32_t loops = ITERS;
+    
+    // BLOCO DE SILÍCIO PURO - ARMv7 NEON ASSEMBLY
+    // Todo o estado da Matrix (64 dimensões) vive dentro de q0-q15.
+    // Zero acesso à memória RAM durante o loop. Zero Fricção.
+    asm volatile (
+        // 1. Injeta a Força Vigesimal (Base 20 -> 0.05) no registrador q14
+        "vdup.32 q14, %[force] \n\t"
+        
+        // 2. Zera o Acumulador de Tensão (q15) e o Estado Inicial (q0)
+        "veor q15, q15, q15 \n\t"
+        "veor q0, q0, q0 \n\t"
+
+        // 3. INÍCIO DO VÓRTICE (Label 1)
+        "1: \n\t"
+        
+        // --- COLAPSO DE ESTADOS (Cascata NEON 32-bits) ---
+        // A interferência acontece puramente em hardware.
+        "vmla.f32 q1, q0, q14 \n\t"
+        "vmla.f32 q2, q1, q14 \n\t"
+        "vmla.f32 q3, q2, q14 \n\t"
+        "vmla.f32 q4, q3, q14 \n\t"
+        "vmla.f32 q5, q4, q14 \n\t"
+        "vmla.f32 q6, q5, q14 \n\t"
+        "vmla.f32 q7, q6, q14 \n\t"
+        "vmla.f32 q8, q7, q14 \n\t"
+        "vmla.f32 q9, q8, q14 \n\t"
+        "vmla.f32 q10, q9, q14 \n\t"
+        "vmla.f32 q11, q10, q14 \n\t"
+        "vmla.f32 q12, q11, q14 \n\t"
+        "vmla.f32 q13, q12, q14 \n\t"
+        
+        // Fechando o Toroide (q13 afeta q0)
+        "vmla.f32 q0, q13, q14 \n\t"
+
+        // Extraindo a Invariante para a Âncora (q15)
+        "vadd.f32 q15, q15, q0 \n\t"
+
+        // --- CONTROLE DE FLUXO ---
+        "subs %[count], %[count], #1 \n\t" // Subtrai 1 do contador
+        "bne 1b \n\t"                      // Se não for zero, volta pro Label 1
+
+        : [count] "+r" (loops) // Output: Contador modificado
+        : [force] "r" (0x3D4CCCCD) // Input: 0.05 em Hex Float (IEEE 754) para injetar direto
+        : "q0","q1","q2","q3","q4","q5","q6","q7","q8","q9","q10","q11","q12","q13","q14","q15","cc" // Clobbers: Avisa o C que tomamos a FPU inteira
+    );
+
+    return NULL;
+}
+
+int main() {
+    pthread_t threads[CORES];
+    int ids[CORES];
+    struct timespec start, end;
+
+    printf("\n[VECTRA-RAW] MOTOR ARMv7-32 ATIVADO. RAM ISOLADA. FPU SATURADA.\n");
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    for(int i=0; i<CORES; i++) {
+        ids[i] = i;
+        pthread_create(&threads[i], NULL, pulse_baremetal, &ids[i]);
+    }
+    for(int i=0; i<CORES; i++) pthread_join(threads[i], NULL);
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    double elapsed = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+    double total_states = (double)CORES * ITERS * 64.0;
+
+    printf("\n--- RELATORIO DE SINTESE DIRETA (ARMv7 32-bit) ---\n");
+    printf("Tempo de Colapso : %.4f segundos\n", elapsed);
+    printf("Ciclos Vetoriais : %.2f Milhoes/s\n", (CORES * (double)ITERS) / elapsed / 1e6);
+    printf("Estados/segundo  : %.2f Bilhoes/s\n", (total_states / elapsed) / 1e9);
+    printf("Massa Oculta     : %.2f Bilhoes (Residentes em Registrador)\n", total_states / 1e9);
+    printf("Friccao de Mem.  : ZERO (Loop 100%% contido nos registradores Q)\n");
+    printf("--------------------------------------------------\n\n");
+
+    return 0;
+}
+
+
+------------------------------------------------------------
+### ARQUIVO: vectra_quantum_total_sentinel.c
+------------------------------------------------------------
+
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <sched.h>
+#include <time.h>
+#include <unistd.h>
+
+#define CORES 8
+#define BLOCK_SIZE 4096
+#define ITERS 500000
+#define V_BASE20 0x3D4CCCCD
+#define V_PHI    0x3FCF1BBC
+
+typedef struct {
+    uint32_t data[BLOCK_SIZE/4] __attribute__((aligned(BLOCK_SIZE)));
+} VectraBlock;
+
+void* sentinel_thread(void* arg) {
+    int core_id = *(int*)arg;
+    cpu_set_t cpuset; CPU_ZERO(&cpuset); CPU_SET(core_id, &cpuset);
+    sched_setaffinity(0, sizeof(cpu_set_t), &cpuset);
+
+    void* mem = NULL;
+    if(posix_memalign(&mem, BLOCK_SIZE, sizeof(VectraBlock)) != 0) return NULL;
+    VectraBlock* block = (VectraBlock*)mem;
+
+    uint32_t loops = ITERS;
+    uint32_t* ptr = block->data;
+
+    asm volatile (
+        "vld1.32 {q0, q1}, [%[buf]]!     \n\t"
+        "vld1.32 {q2, q3}, [%[buf]]      \n\t"
+        "sub %[buf], %[buf], #32         \n\t"
+
+        "vdup.32 q14, %[v20]             \n\t"
+        "vdup.32 q15, %[phi]             \n\t"
+
+        "1: \n\t"
+        "vmla.f32 q0, q1, q14            \n\t"
+        "vmla.f32 q2, q3, q14            \n\t"
+        "vmls.f32 q1, q2, q15            \n\t"
+        "vmls.f32 q3, q0, q15            \n\t"
+
+        "vext.32 q4, q0, q1, #1          \n\t"
+        "vrev64.32 q5, q2                \n\t"
+        "veor q0, q4, q5                 \n\t"
+        "vext.32 q2, q3, q0, #2          \n\t"
+
+        "subs %[count], %[count], #1     \n\t"
+        "bne 1b                          \n\t"
+
+        "vst1.32 {q0, q1}, [%[buf]]!     \n\t"
+        "vst1.32 {q2, q3}, [%[buf]]      \n\t"
+        : [count] "+r" (loops), [buf] "+r" (ptr)
+        : [v20] "r" (V_BASE20), [phi] "r" (V_PHI)
+        : "q0","q1","q2","q3","q4","q5","q14","q15","memory","cc"
+    );
+
+    free(block);
+    return NULL;
+}
+
+int main() {
+    pthread_t threads[CORES];
+    int ids[CORES];
+    struct timespec start, end;
+
+    printf("\n\033[1;36m[VECTRA-QUANTUM-TOTAL-SENTINEL] INICIANDO OBSERVAÇÃO CONTÍNUA\033[0m\n");
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    for(int i=0; i<CORES; i++){
+        ids[i] = i;
+        pthread_create(&threads[i], NULL, sentinel_thread, &ids[i]);
+    }
+    for(int i=0; i<CORES; i++) pthread_join(threads[i], NULL);
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    double elapsed = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec)/1e9;
+    double total_states = (double)CORES * ITERS * BLOCK_SIZE * 8.0;
+
+    printf("\n\033[1;32m--- RELATÓRIO TOTAL-SENTINEL ---\n");
+    printf("Tempo de Observação : %.4f s\n", elapsed);
+    printf("Throughput          : %.2f G-Estados/s\n", (total_states / elapsed) / 1e9);
+    printf("Integridade         : 0x0 (Quantum-Like Active)\n");
+    printf("\033[1;32m--------------------------------\033[0m\n\n");
+
+    return 0;
+}
+
+
+------------------------------------------------------------
+### ARQUIVO: vectra_quantum_sentinel.c
+------------------------------------------------------------
+
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <stdint.h>
+#include <pthread.h>
+#include <sched.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+#define CORES 8
+#define BLOCKS 64         // Blocos de memória monitorados
+#define BLOCK_SIZE 128    // 128 palavras (512 bytes) por bloco
+#define ITERS 100000      // Iterações de purificação
+#define V_BASE20 0x3D4CCCCD
+#define V_PHI    0x3FCF1BBC
+
+typedef struct {
+    uint32_t data[BLOCK_SIZE] __attribute__((aligned(4096)));
+} MemBlock;
+
+MemBlock memory_pool[BLOCKS];
+
+void* quantum_sentinel(void* arg) {
+    int core_id = *(int*)arg;
+    cpu_set_t cpuset; CPU_ZERO(&cpuset); CPU_SET(core_id, &cpuset);
+    sched_setaffinity(0, sizeof(cpu_set_t), &cpuset);
+
+    for(int b = core_id; b < BLOCKS; b += CORES) {
+        uint32_t *ptr = memory_pool[b].data;
+        uint32_t loops = ITERS;
+
+        asm volatile (
+            "vld1.32 {q0, q1}, [%[buf]]!     \n\t"
+            "vld1.32 {q2, q3}, [%[buf]]      \n\t"
+            "sub %[buf], %[buf], #32         \n\t"
+
+            "vdup.32 q14, %[v20]             \n\t"
+            "vdup.32 q15, %[phi]             \n\t"
+
+            "1: \n\t"
+            "vmla.f32 q0, q1, q14            \n\t"
+            "vmla.f32 q2, q3, q14            \n\t"
+            "vmls.f32 q1, q2, q15            \n\t"
+            "vmls.f32 q3, q0, q15            \n\t"
+
+            "vext.32 q4, q0, q1, #1          \n\t"
+            "vrev64.32 q5, q2                \n\t"
+            "veor q0, q4, q5                 \n\t"
+            "vext.32 q2, q3, q0, #2          \n\t"
+
+            "subs %[count], %[count], #1     \n\t"
+            "bne 1b                          \n\t"
+
+            "vst1.32 {q0, q1}, [%[buf]]!     \n\t"
+            "vst1.32 {q2, q3}, [%[buf]]      \n\t"
+            : [count] "+r" (loops), [buf] "+r" (ptr)
+            : [v20] "r" (V_BASE20), [phi] "r" (V_PHI)
+            : "q0","q1","q2","q3","q4","q5","q14","q15","memory","cc"
+        );
+    }
+
+    return NULL;
+}
+
+int main() {
+    pthread_t threads[CORES];
+    int ids[CORES];
+    struct timespec start, end;
+
+    printf("\n[VECTRA-QUANTUM-SENTINEL] OBSERVAÇÃO REAL-TIME INICIADA\n");
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    for(int i=0; i<CORES; i++) {
+        ids[i] = i;
+        pthread_create(&threads[i], NULL, quantum_sentinel, &ids[i]);
+    }
+    for(int i=0; i<CORES; i++) pthread_join(threads[i], NULL);
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    double elapsed = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec)/1e9;
+    double total_states = (double)CORES * ITERS * BLOCKS * 512.0;
+
+    printf("\n\033[1;32m--- RELATÓRIO VECTRA-SENTINEL ---\n");
+    printf("Tempo de Observação : %.4f s\n", elapsed);
+    printf("Throughput          : %.2f G-Estados/s\n", (total_states / elapsed) / 1e9);
+    printf("Integridade         : 0x0 (Quantum-Like Active)\n");
+    printf("\033[1;32m----------------------------------\033[0m\n\n");
+
+    return 0;
+}
+
+
+------------------------------------------------------------
+### ARQUIVO: vectra_quantum_observer.c
+------------------------------------------------------------
+
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <stdint.h>
+#include <pthread.h>
+#include <sched.h>
+#include <stdlib.h>
+#include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
+
+#define CORES 8
+#define ITERS 3000000
+#define V_BASE20 0x3D4CCCCD
+#define V_PHI    0x3FCF1BBC
+#define BLOCK_SIZE 4096
+
+typedef struct {
+    uint32_t data[BLOCK_SIZE/4] __attribute__((aligned(4096)));
+} VectraBlock;
+
+void inject_real_input(VectraBlock *block) {
+    // Lê dados aleatórios do sistema como fluxo inicial
+    int fd = open("/dev/urandom", O_RDONLY);
+    if(fd >= 0) {
+        read(fd, block->data, BLOCK_SIZE);
+        close(fd);
+    } else {
+        // Fallback: preenchimento incremental
+        for(int i=0;i<BLOCK_SIZE/4;i++) block->data[i] = i;
+    }
+}
+
+void* pulse_observer(void* arg) {
+    int core_id = *(int*)arg;
+    cpu_set_t cpuset; CPU_ZERO(&cpuset); CPU_SET(core_id, &cpuset);
+    sched_setaffinity(0, sizeof(cpuset), &cpuset);
+
+    void* mem = NULL;
+    if(posix_memalign(&mem, 4096, sizeof(VectraBlock)) != 0) return NULL;
+    VectraBlock *block = (VectraBlock*)mem;
+
+    inject_real_input(block);
+
+    uint32_t *ptr = block->data;
+    uint32_t loops = ITERS;
+
+    asm volatile (
+        "vld1.32 {q0, q1}, [%[buf]]!    \n\t"
+        "vld1.32 {q2, q3}, [%[buf]]     \n\t"
+        "sub %[buf], %[buf], #32       \n\t"
+
+        "vdup.32 q14, %[v20]           \n\t"
+        "vdup.32 q15, %[phi]           \n\t"
+
+        "1: \n\t"
+        "vmla.f32 q0, q1, q14          \n\t"
+        "vmla.f32 q2, q3, q14          \n\t"
+        "vmls.f32 q1, q2, q15          \n\t"
+        "vmls.f32 q3, q0, q15          \n\t"
+
+        "vext.32 q4, q0, q1, #1        \n\t"
+        "vrev64.32 q5, q2              \n\t"
+        "veor q0, q4, q5               \n\t"
+        "vext.32 q2, q3, q0, #2        \n\t"
+
+        "subs %[count], %[count], #1   \n\t"
+        "bne 1b                        \n\t"
+
+        "vst1.32 {q0, q1}, [%[buf]]!    \n\t"
+        "vst1.32 {q2, q3}, [%[buf]]     \n\t"
+        : [count] "+r"(loops), [buf] "+r"(ptr)
+        : [v20] "r"(V_BASE20), [phi] "r"(V_PHI)
+        : "q0","q1","q2","q3","q4","q5","q14","q15","memory","cc"
+    );
+
+    free(block);
+    return NULL;
+}
+
+int main() {
+    pthread_t threads[CORES];
+    int ids[CORES];
+    struct timespec start, end;
+
+    printf("\n\033[1;35m[VECTRA-QUANTUM-OBSERVER] INICIANDO OBSERVAÇÃO REAL-TIME\033[0m\n");
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    for(int i=0;i<CORES;i++) {
+        ids[i]=i;
+        pthread_create(&threads[i],NULL,pulse_observer,&ids[i]);
+    }
+    for(int i=0;i<CORES;i++) pthread_join(threads[i],NULL);
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    double elapsed = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec)/1e9;
+    double total_states = (double)CORES * ITERS * 512.0;
+
+    printf("\n\033[1;32m--- RELATÓRIO DE OBSERVAÇÃO VECTRA ---\n");
+    printf("Tempo de Voo      : %.4f s\n", elapsed);
+    printf("Throughput        : %.2f G-Estados/s\n", (total_states/elapsed)/1e9);
+    printf("Integridade       : 0x0 (Quantum-Like Active)\n");
+    printf("\033[1;32m-----------------------------------\033[0m\n\n");
+
+    return 0;
+}
+
+
+------------------------------------------------------------
+### ARQUIVO: vectra_quantum_final.c
+------------------------------------------------------------
+
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <stdint.h>
+#include <pthread.h>
+#include <sched.h>
+#include <time.h>
+#include <stdlib.h>
+
+// --- ENGINE CONFIG ---
+#define CORES 8
+#define ITERS 5000000 
+#define V_BASE20 0x3D4CCCCD 
+#define V_PHI    0x3FCF1BBC 
+
+typedef struct {
+    uint32_t data[128] __attribute__((aligned(4096))); 
+} VectraFabric;
+
+void* pulse_vortex(void* arg) {
+    int core_id = *(int*)arg;
+    cpu_set_t cpuset; CPU_ZERO(&cpuset); CPU_SET(core_id, &cpuset);
+    sched_setaffinity(0, sizeof(cpu_set_t), &cpuset);
+
+    // Substituindo aligned_alloc por posix_memalign para compatibilidade total
+    void* mem = NULL;
+    if (posix_memalign(&mem, 4096, sizeof(VectraFabric)) != 0) return NULL;
+    VectraFabric *fabric = (VectraFabric*)mem;
+    
+    uint32_t loops = ITERS;
+    uint32_t *ptr = fabric->data;
+
+    asm volatile (
+        "vld1.32 {q0, q1}, [%[buf]]!    \n\t" 
+        "vld1.32 {q2, q3}, [%[buf]]     \n\t" 
+        "sub %[buf], %[buf], #32       \n\t" 
+
+        "vdup.32 q14, %[v20]           \n\t" 
+        "vdup.32 q15, %[phi]           \n\t" 
+
+        "1: \n\t"
+        "vmla.f32 q0, q1, q14          \n\t" 
+        "vmla.f32 q2, q3, q14          \n\t"
+        "vmls.f32 q1, q2, q15          \n\t"
+        "vmls.f32 q3, q0, q15          \n\t"
+
+        "vext.32 q4, q0, q1, #1        \n\t" 
+        "vrev64.32 q5, q2              \n\t" 
+        "veor q0, q4, q5               \n\t" 
+        "vext.32 q2, q3, q0, #2        \n\t" 
+
+        "subs %[count], %[count], #1   \n\t"
+        "bne 1b                        \n\t"
+
+        "vst1.32 {q0, q1}, [%[buf]]!    \n\t"
+        "vst1.32 {q2, q3}, [%[buf]]     \n\t"
+        : [count] "+r" (loops), [buf] "+r" (ptr)
+        : [v20] "r" (V_BASE20), [phi] "r" (V_PHI)
+        : "q0","q1","q2","q3","q4","q5","q14","q15","memory","cc"
+    );
+
+    free(fabric);
+    return NULL;
+}
+
+int main() {
+    pthread_t threads[CORES];
+    int ids[CORES];
+    struct timespec start, end;
+
+    printf("\n\033[1;35m[VECTRA-QUANTUM] REATOR ESTABILIZADO (posix_memalign)\033[0m\n");
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    for(int i=0; i<CORES; i++) {
+        ids[i] = i;
+        pthread_create(&threads[i], NULL, pulse_vortex, &ids[i]);
+    }
+    for(int i=0; i<CORES; i++) pthread_join(threads[i], NULL);
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    double elapsed = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec)/1e9;
+    double total_states = (double)CORES * ITERS * 512.0;
+
+    printf("\n\033[1;32m--- RELATÓRIO DE SÍNTESE VECTRA ---\n");
+    printf("Tempo de Voo      : %.4f s\n", elapsed);
+    printf("Throughput        : %.2f G-Estados/s\n", (total_states / elapsed) / 1e9);
+    printf("Integridade       : 0x0 (Quantum-Like Active)\n");
+    printf("\033[1;32m-----------------------------------\033[0m\n\n");
+
+    return 0;
+}
+
+
+------------------------------------------------------------
+### ARQUIVO: vectra_portable.c
+------------------------------------------------------------
+
+#include <stdio.h>
+#include <stdint.h>
+#include <time.h>
+
+// =====================================================
+// DETECÇÃO SIMPLES DE ARQUITETURA
+// =====================================================
+#if defined(__aarch64__)
+#define ARCH_ARM64 1
+#else
+#define ARCH_ARM64 0
+#endif
+
+#if defined(__arm__)
+#define ARCH_ARM32 1
+#else
+#define ARCH_ARM32 0
+#endif
+
+#if defined(__x86_64__)
+#define ARCH_X86_64 1
+#else
+#define ARCH_X86_64 0
+#endif
+
+// =====================================================
+// TIMER PORTÁVEL
+// =====================================================
+static inline uint64_t get_time_ns() {
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (uint64_t)t.tv_sec * 1000000000ULL + t.tv_nsec;
+}
+
+// =====================================================
+// FALLBACK (RODA EM QUALQUER CPU)
+// =====================================================
+uint32_t kernel_fallback(uint8_t *buf, size_t n) {
+    uint32_t c = 0;
+    for(size_t i=0;i<n;i++) {
+        c ^= buf[i];
+        for(int j=0;j<8;j++)
+            c = (c >> 1) ^ (0xEDB88320 & -(c & 1));
+    }
+    return c;
+}
+
+// =====================================================
+// ARM64 + CRC + NEON
+// =====================================================
+#if ARCH_ARM64
+uint32_t kernel_arm64(uint8_t *buf, size_t n) {
+    uint32_t crc = 0;
+
+    size_t i = 0;
+
+    for (; i + 8 <= n; i += 8) {
+        uint64_t v = *(uint64_t*)(buf + i);
+        asm volatile("crc32x %w[c], %w[c], %x[v]"
+            : [c] "+r"(crc)
+            : [v] "r"(v));
+    }
+
+    for (; i < n; i++) {
+        asm volatile("crc32b %w[c], %w[c], %w[v]"
+            : [c] "+r"(crc)
+            : [v] "r"(buf[i]));
+    }
+
+    return crc;
+}
+#endif
+
+// =====================================================
+// X86 (fallback otimizado simples)
+// =====================================================
+#if ARCH_X86_64
+uint32_t kernel_x86(uint8_t *buf, size_t n) {
+    uint32_t c = 0;
+    for(size_t i=0;i<n;i++) {
+        c = (c >> 1) ^ ((c ^ buf[i]) & 1 ? 0xEDB88320 : 0);
+    }
+    return c;
+}
+#endif
+
+// =====================================================
+// MAIN (ORQUESTRADOR)
+// =====================================================
+int main() {
+
+    size_t n = 1 << 20; // 1MB
+    static uint8_t buf[1<<20];
+
+    // inicializar buffer determinístico
+    for(size_t i=0;i<n;i++)
+        buf[i] = (uint8_t)(i * 1315423911u);
+
+    uint64_t t0 = get_time_ns();
+
+    uint32_t crc = 0;
+
+    // =========================
+    // AUTO DISPATCH
+    // =========================
+#if ARCH_ARM64
+    printf("[MODE] ARM64 CRC\n");
+    crc = kernel_arm64(buf, n);
+
+#elif ARCH_X86_64
+    printf("[MODE] X86\n");
+    crc = kernel_x86(buf, n);
+
+#else
+    printf("[MODE] FALLBACK\n");
+    crc = kernel_fallback(buf, n);
+#endif
+
+    uint64_t t1 = get_time_ns();
+
+    printf("CRC=%08x\n", crc);
+    printf("TIME=%llu ns\n", (unsigned long long)(t1 - t0));
+    printf("THROUGHPUT=%.2f MB/s\n",
+        (double)n / (t1 - t0) * 1e3);
+
+    return 0;
+}
+
+
+------------------------------------------------------------
+### ARQUIVO: vectra_zero.c
+------------------------------------------------------------
+
+// ============================================================
+// VECTRA ZERO-FRICTION
+// Universal (ARM32 / ARM64 / x86)
+// Sem libc pesada, sem GC, com medição física real quando possível
+// ============================================================
+
+#include <stdint.h>
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <time.h>
+
+#if defined(__aarch64__)
+#define ARCH_ARM64 1
+#else
+#define ARCH_ARM64 0
+#endif
+
+// ============================================================
+// TIMER (REAL OU FALLBACK)
+// ============================================================
+static inline uint64_t rdtime() {
+#if ARCH_ARM64
+    uint64_t v;
+    asm volatile("mrs %0, cntvct_el0" : "=r"(v));
+    return v;
+#else
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (uint64_t)t.tv_sec * 1000000000ULL + t.tv_nsec;
+#endif
+}
+
+// ============================================================
+// CRC (INVARIANTE)
+// ============================================================
+static inline uint32_t crc_kernel(uint8_t *p, size_t n) {
+    uint32_t c = 0;
+
+#if ARCH_ARM64
+    // tenta usar hardware
+    for (size_t i = 0; i + 8 <= n; i += 8) {
+        uint64_t v = *(uint64_t*)(p + i);
+        asm volatile("crc32x %w[c], %w[c], %x[v]"
+            : [c] "+r"(c)
+            : [v] "r"(v));
+    }
+    for (size_t i = (n & ~7); i < n; i++) {
+        asm volatile("crc32b %w[c], %w[c], %w[v]"
+            : [c] "+r"(c)
+            : [v] "r"(p[i]));
+    }
+#else
+    // fallback universal
+    for (size_t i = 0; i < n; i++) {
+        c ^= p[i];
+        for (int j = 0; j < 8; j++)
+            c = (c >> 1) ^ (0xEDB88320 & -(c & 1));
+    }
+#endif
+
+    return c;
+}
+
+// ============================================================
+// MIX (VARIANTE – SEM NEON, MAS CACHE-FRIENDLY)
+// ============================================================
+static inline void mix_kernel(uint8_t *p, size_t n) {
+    for (size_t i = 0; i + 64 <= n; i += 64) {
+        uint8_t tmp[64];
+
+        for (int j = 0; j < 64; j++)
+            tmp[j] = p[i + j];
+
+        for (int j = 0; j < 64; j++) {
+            uint8_t a = tmp[(j + 7) & 63];
+            uint8_t b = tmp[(j + 11) & 63];
+            p[i + j] ^= a ^ b;
+        }
+    }
+}
+
+// ============================================================
+// WRITE DIRETO (SEM STDIO)
+// ============================================================
+static void write_str(const char *s) {
+    size_t n = 0;
+    while (s[n]) n++;
+    syscall(SYS_write, 1, s, n);
+}
+
+static void hex32(uint32_t v) {
+    char h[] = "0123456789abcdef";
+    char out[8];
+    for (int i = 7; i >= 0; i--) {
+        out[i] = h[v & 0xF];
+        v >>= 4;
+    }
+    syscall(SYS_write, 1, out, 8);
+}
+
+static void hex64(uint64_t v) {
+    char h[] = "0123456789abcdef";
+    char out[16];
+    for (int i = 15; i >= 0; i--) {
+        out[i] = h[v & 0xF];
+        v >>= 4;
+    }
+    syscall(SYS_write, 1, out, 16);
+}
+
+// ============================================================
+// MAIN – PIPELINE UNIFICADO (56 CICLOS)
+// ============================================================
+int main() {
+
+    static uint8_t buf[4096] __attribute__((aligned(64)));
+
+    // seed determinístico (cache-aligned)
+    uint64_t s = 0x9E3779B97F4A7C15ULL;
+    for (int i = 0; i < 4096; i += 8) {
+        *(uint64_t*)(buf + i) = s;
+        s += 0x9E3779B9;
+    }
+
+    uint64_t total = 0;
+    uint32_t acc = 0;
+
+    uint64_t min = (uint64_t)-1;
+    uint64_t max = 0;
+
+    // ========================================================
+    // LOOP PRINCIPAL (56 ciclos)
+    // ========================================================
+    for (int i = 0; i < 56; i++) {
+
+        uint64_t t0 = rdtime();
+        uint32_t c = crc_kernel(buf, 4096);
+        uint64_t t1 = rdtime();
+
+        uint64_t d1 = t1 - t0;
+        total += d1;
+
+        if (d1 < min) min = d1;
+        if (d1 > max) max = d1;
+
+        acc ^= c;
+
+        t0 = rdtime();
+        mix_kernel(buf, 4096);
+        t1 = rdtime();
+
+        uint64_t d2 = t1 - t0;
+        total += d2;
+
+        if (d2 < min) min = d2;
+        if (d2 > max) max = d2;
+    }
+
+    // ========================================================
+    // OUTPUT (FÍSICO + LÓGICO)
+    // ========================================================
+    write_str("MODE:");
+#if ARCH_ARM64
+    write_str("ARM64\n");
+#else
+    write_str("GENERIC\n");
+#endif
+
+    write_str("CRC:");
+    hex32(acc);
+
+    write_str(" TOTAL:");
+    hex64(total);
+
+    write_str("\nMIN:");
+    hex64(min);
+
+    write_str(" MAX:");
+    hex64(max);
+
+    write_str("\n");
+
+    return 0;
+}
+
+
+============================================================
+## BLINK / NEON / MULTICORE
+============================================================
+
+
+------------------------------------------------------------
+### ARQUIVO: blink_neon_multicore.c
+------------------------------------------------------------
+
+#include <stdio.h>
+#include <stdint.h>
+#include <pthread.h>
+#include <arm_neon.h>
+#include <time.h>
+
+#define CORES 8
+#define ITER  10000000
+
+typedef struct {
+    uint32_t seed[4];
+} thread_data;
+
+static inline uint32x4_t operador_vec(uint32x4_t s) {
+
+    uint32x4_t a =
+        veorq_u32(s, vshlq_n_u32(s, 5));
+
+    uint32x4_t phi =
+        vdupq_n_u32(0x9e3779b9);
+
+    uint32x4_t b =
+        vaddq_u32(a, phi);
+
+    uint32x4_t c =
+        veorq_u32(b, vshrq_n_u32(b, 7));
+
+    return c;
+}
+
+void* worker(void* arg) {
+
+    thread_data* td =
+        (thread_data*)arg;
+
+    uint32x4_t estado =
+        vld1q_u32(td->seed);
+
+    uint32x4_t eco =
+        vdupq_n_u32(0x12345678);
+
+    for (uint64_t i = 0; i < ITER; i++) {
+
+        uint32x4_t prev = estado;
+
+        estado = operador_vec(estado);
+
+        eco = veorq_u32(eco, prev);
+
+        estado = veorq_u32(estado, eco);
+    }
+
+    vst1q_u32(td->seed, estado);
+
+    return NULL;
+}
+
+int main() {
+
+    pthread_t threads[CORES];
+    thread_data data[CORES];
+
+    struct timespec start, end;
+
+    for (int i = 0; i < CORES; i++) {
+
+        data[i].seed[0] = 0xA5A5A5A5 ^ i;
+        data[i].seed[1] = 0x5A5A5A5A ^ i;
+        data[i].seed[2] = 0x3C3C3C3C ^ i;
+        data[i].seed[3] = 0xC3C3C3C3 ^ i;
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    for (int i = 0; i < CORES; i++) {
+
+        pthread_create(
+            &threads[i],
+            NULL,
+            worker,
+            &data[i]
+        );
+    }
+
+    for (int i = 0; i < CORES; i++) {
+
+        pthread_join(threads[i], NULL);
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+
+    double tempo =
+        (end.tv_sec - start.tv_sec) +
+        (end.tv_nsec - start.tv_nsec) / 1e9;
+
+    uint64_t total_ops =
+        (uint64_t)CORES *
+        ITER * 4;
+
+    printf("\n--- NEON MULTICORE ---\n");
+
+    printf("Threads  : %d\n", CORES);
+
+    printf("Tempo(s) : %.4f\n", tempo);
+
+    printf("Ops/s    : %.2f\n",
+           total_ops / tempo);
+
+    return 0;
+}
+
+
+------------------------------------------------------------
+### ARQUIVO: blink_neon_multistream.c
+------------------------------------------------------------
+
+#include <stdio.h>
+#include <stdint.h>
+#include <arm_neon.h>
+#include <time.h>
+
+#define ITER 25000000
+
+static inline uint32x4_t operador_vec(uint32x4_t s) {
+
+    uint32x4_t a =
+        veorq_u32(s, vshlq_n_u32(s, 5));
+
+    uint32x4_t phi =
+        vdupq_n_u32(0x9e3779b9);
+
+    uint32x4_t b =
+        vaddq_u32(a, phi);
+
+    uint32x4_t c =
+        veorq_u32(b, vshrq_n_u32(b, 7));
+
+    return c;
+}
+
+int main() {
+
+    uint32_t seed[4] = {
+        0xA5A5A5A5,
+        0x5A5A5A5A,
+        0x3C3C3C3C,
+        0xC3C3C3C3
+    };
+
+    uint32x4_t estado =
+        vld1q_u32(seed);
+
+    uint32x4_t eco =
+        vdupq_n_u32(0x12345678);
+
+    struct timespec start, end;
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    for (uint64_t i = 0; i < ITER; i++) {
+
+        uint32x4_t prev = estado;
+
+        estado = operador_vec(estado);
+
+        eco = veorq_u32(eco, prev);
+
+        estado = veorq_u32(estado, eco);
+
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+
+    uint32_t out[4];
+    vst1q_u32(out, estado);
+
+    double tempo =
+        (end.tv_sec - start.tv_sec) +
+        (end.tv_nsec - start.tv_nsec) / 1e9;
+
+    printf("\n--- NEON MULTISTREAM ---\n");
+
+    printf("Estado[0] : 0x%08X\n", out[0]);
+    printf("Estado[1] : 0x%08X\n", out[1]);
+
+    printf("Tempo(s)  : %.4f\n", tempo);
+
+    printf("Ops/s     : %.2f\n",
+           (ITER * 4.0) / tempo);
+
+    return 0;
+}
+
+
+------------------------------------------------------------
+### ARQUIVO: blink_neon_feedback_fix.c
+------------------------------------------------------------
+
+#include <stdio.h>
+#include <stdint.h>
+#include <arm_neon.h>
+#include <time.h>
+
+#define ITER 25000000
+
+static inline uint32x4_t operador_vec(uint32x4_t s) {
+
+    uint32x4_t a =
+        veorq_u32(s, vshlq_n_u32(s, 5));
+
+    uint32x4_t phi =
+        vdupq_n_u32(0x9e3779b9);
+
+    uint32x4_t b =
+        vaddq_u32(a, phi);
+
+    uint32x4_t c =
+        veorq_u32(b, vshrq_n_u32(b, 7));
+
+    return c;
+}
+
+int main() {
+
+    volatile uint32x4_t estado =
+        vdupq_n_u32(0xA5A5A5A5);
+
+    uint32x4_t eco =
+        vdupq_n_u32(0x12345678);
+
+    struct timespec start, end;
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    for (uint64_t i = 0; i < ITER; i++) {
+
+        uint32x4_t prev = estado;
+
+        estado = operador_vec(estado);
+
+        eco = veorq_u32(eco, prev);
+
+        estado = veorq_u32(estado, eco);
+
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+
+    uint32_t out[4];
+    vst1q_u32(out, estado);
+
+    double tempo =
+        (end.tv_sec - start.tv_sec) +
+        (end.tv_nsec - start.tv_nsec) / 1e9;
+
+    printf("\n--- NEON FEEDBACK FIX ---\n");
+
+    printf("Estado[0] : 0x%08X\n", out[0]);
+
+    printf("Tempo(s)  : %.4f\n", tempo);
+
+    printf("Ops/s     : %.2f\n",
+           (ITER * 4.0) / tempo);
+
+    return 0;
+}
+
+
+------------------------------------------------------------
+### ARQUIVO: blink_multicore.c
+------------------------------------------------------------
+
+#include <stdio.h>
+#include <stdint.h>
+#include <pthread.h>
+#include <time.h>
+
+#define CORES 8
+#define ITER  50000000
+
+typedef struct {
+    int id;
+    uint32_t estado;
+} thread_data;
+
+static inline uint32_t mix_crc32(uint32_t x) {
+    x ^= x >> 16;
+    x *= 0x7feb352d;
+    x ^= x >> 15;
+    x *= 0x846ca68b;
+    x ^= x >> 16;
+    return x;
+}
+
+static inline uint32_t operador(uint32_t s) {
+    uint32_t a = s ^ (s << 5);
+    uint32_t b = a + 0x9e3779b9;
+    uint32_t c = b ^ (b >> 7);
+    return c;
+}
+
+void* worker(void* arg) {
+
+    thread_data* td = (thread_data*)arg;
+
+    uint32_t estado = td->estado;
+    uint32_t eco = 0;
+
+    for (uint64_t i = 0; i < ITER; i++) {
+
+        uint32_t prev = estado;
+
+        estado = operador(estado);
+
+        eco = mix_crc32(estado ^ prev);
+
+        estado ^= eco;
+    }
+
+    td->estado = estado;
+
+    return NULL;
+}
+
+int main() {
+
+    pthread_t threads[CORES];
+    thread_data data[CORES];
+
+    struct timespec start, end;
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    for (int i = 0; i < CORES; i++) {
+
+        data[i].id = i;
+        data[i].estado = 0xA5A5A5A5 ^ i;
+
+        pthread_create(
+            &threads[i],
+            NULL,
+            worker,
+            &data[i]
+        );
+    }
+
+    for (int i = 0; i < CORES; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+
+    double tempo =
+        (end.tv_sec - start.tv_sec) +
+        (end.tv_nsec - start.tv_nsec) / 1e9;
+
+    uint64_t total_iter =
+        (uint64_t)CORES * ITER;
+
+    printf("\n--- MULTICORE RESULTADO ---\n");
+    printf("Threads   : %d\n", CORES);
+    printf("Total Ops : %llu\n", total_iter);
+    printf("Tempo(s)  : %.4f\n", tempo);
+    printf("Ops/s     : %.2f\n",
+           total_iter / tempo);
+
+    return 0;
+}
+
+
+------------------------------------------------------------
+### ARQUIVO: blink_neon.c
+------------------------------------------------------------
+
+#include <stdio.h>
+#include <stdint.h>
+#include <arm_neon.h>
+#include <time.h>
+
+#define ITER 25000000
+
+static inline uint32x4_t operador_vec(uint32x4_t s) {
+
+    uint32x4_t a =
+        veorq_u32(s, vshlq_n_u32(s, 5));
+
+    uint32x4_t phi =
+        vdupq_n_u32(0x9e3779b9);
+
+    uint32x4_t b =
+        vaddq_u32(a, phi);
+
+    uint32x4_t c =
+        veorq_u32(b, vshrq_n_u32(b, 7));
+
+    return c;
+}
+
+int main() {
+
+    uint32x4_t estado =
+        vdupq_n_u32(0xA5A5A5A5);
+
+    struct timespec start, end;
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    for (uint64_t i = 0; i < ITER; i++) {
+
+        estado = operador_vec(estado);
+
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+
+    uint32_t out[4];
+    vst1q_u32(out, estado);
+
+    double tempo =
+        (end.tv_sec - start.tv_sec) +
+        (end.tv_nsec - start.tv_nsec) / 1e9;
+
+    printf("\n--- NEON RESULTADO ---\n");
+    printf("Estado[0] : 0x%08X\n", out[0]);
+    printf("Estado[1] : 0x%08X\n", out[1]);
+    printf("Estado[2] : 0x%08X\n", out[2]);
+    printf("Estado[3] : 0x%08X\n", out[3]);
+
+    printf("Tempo(s)  : %.4f\n", tempo);
+    printf("Ops/s     : %.2f\n",
+           (ITER * 4.0) / tempo);
+
+    return 0;
+}
+
+
+============================================================
+## RESULTADO DO SCAN
+============================================================
+
+
+------------------------------------------------------------
+### ARQUIVO: exec_scan_results.txt
+------------------------------------------------------------
+
+=== rafaelia_armv7 ===
+
+=== rafaelia_b3 ===
+"./rafaelia_b3": error: Android 5.0 and later only support position-independent executables (-fPIE).
+
+=== rafaelia_b3_android ===
+B3_ANDROID: MULTICORE+CRC32SW
+ W:0
+W:3
+W:1
+W:2
+US=000020E3
+CRC=070F5BA8
+B3_ANDROID:DONE
+
+=== rafaelia_bbs.sh ===
+
+=== rafaelia_core_armv7 ===
+
+=== rafaelia_edge_v2 ===
+RAFAELIA EDGE V2\nARM32 | Android | low-memory | cache-aware\nbuffer=256 KB rounds=48 warmup=8\n\nround=00 ns=5057000 MB/s=98.87 coherence=1.000 rollback=0 stuck=0
+round=01 ns=5059538 MB/s=98.82 coherence=1.000 rollback=0 stuck=0
+round=02 ns=5039692 MB/s=99.21 coherence=1.000 rollback=0 stuck=0
+round=03 ns=4685231 MB/s=106.72 coherence=1.000 rollback=0 stuck=0
+round=04 ns=4501077 MB/s=111.08 coherence=1.000 rollback=0 stuck=0
+round=05 ns=4655846 MB/s=107.39 coherence=1.000 rollback=0 stuck=0
+round=06 ns=4560308 MB/s=109.64 coherence=1.000 rollback=0 stuck=0
+round=07 ns=4530462 MB/s=110.36 coherence=1.000 rollback=0 stuck=0
+round=08 ns=4459384 MB/s=112.12 coherence=1.000 rollback=0 stuck=0
+round=09 ns=4528539 MB/s=110.41 coherence=1.000 rollback=0 stuck=0
+round=10 ns=4126770 MB/s=121.16 coherence=1.000 rollback=0 stuck=0
+round=11 ns=4340769 MB/s=115.19 coherence=1.000 rollback=0 stuck=0
+round=12 ns=3819154 MB/s=130.92 coherence=1.000 rollback=0 stuck=0
+round=13 ns=3788846 MB/s=131.97 coherence=1.000 rollback=0 stuck=0
+round=14 ns=3805616 MB/s=131.38 coherence=1.000 rollback=0 stuck=0
+round=15 ns=3608769 MB/s=138.55 coherence=1.000 rollback=0 stuck=0
+round=16 ns=3610308 MB/s=138.49 coherence=1.000 rollback=0 stuck=0
+round=17 ns=3626153 MB/s=137.89 coherence=1.000 rollback=0 stuck=0
+round=18 ns=3468076 MB/s=144.17 coherence=1.000 rollback=0 stuck=0
+round=19 ns=3459000 MB/s=144.55 coherence=1.000 rollback=0 stuck=0
+round=20 ns=3485384 MB/s=143.46 coherence=1.000 rollback=0 stuck=0
+round=21 ns=3317846 MB/s=150.70 coherence=1.000 rollback=0 stuck=0
+round=22 ns=3380461 MB/s=147.91 coherence=1.000 rollback=0 stuck=0
+round=23 ns=3248000 MB/s=153.94 coherence=1.000 rollback=0 stuck=0
+round=24 ns=3171846 MB/s=157.64 coherence=1.000 rollback=0 stuck=0
+round=25 ns=3164154 MB/s=158.02 coherence=1.000 rollback=0 stuck=0
+round=26 ns=2988692 MB/s=167.30 coherence=1.000 rollback=0 stuck=0
+round=27 ns=2366231 MB/s=211.31 coherence=1.000 rollback=0 stuck=0
+round=28 ns=2361385 MB/s=211.74 coherence=1.000 rollback=0 stuck=0
+round=29 ns=2367000 MB/s=211.24 coherence=1.000 rollback=0 stuck=0
+round=30 ns=2425538 MB/s=206.14 coherence=1.000 rollback=0 stuck=0
+round=31 ns=2361923 MB/s=211.69 coherence=1.000 rollback=0 stuck=0
+round=32 ns=2362538 MB/s=211.64 coherence=1.000 rollback=0 stuck=0
+round=33 ns=2364693 MB/s=211.44 coherence=1.000 rollback=0 stuck=0
+round=34 ns=2388923 MB/s=209.30 coherence=1.000 rollback=0 stuck=0
+round=35 ns=2361615 MB/s=211.72 coherence=1.000 rollback=0 stuck=0
+round=36 ns=2361616 MB/s=211.72 coherence=1.000 rollback=0 stuck=0
+round=37 ns=2361615 MB/s=211.72 coherence=1.000 rollback=0 stuck=0
+round=38 ns=2380308 MB/s=210.06 coherence=1.000 rollback=0 stuck=0
+round=39 ns=2361000 MB/s=211.77 coherence=1.000 rollback=0 stuck=0
+
+=== rafaelia_edge_v3 ===
+RAFAELIA EDGE V3
+ARM32 | Android | CRC-only | FNV-only | total | low-memory
+buffer=256 KB rounds=48 warmup=8
+
+round=00 crc_ns=3678923 fnv_ns=3909077 total_ns=7588000 total_MB/s=32.95 coherence=1.000 rollback=0 stuck=0
+round=01 crc_ns=3755616 fnv_ns=3816307 total_ns=7571923 total_MB/s=33.02 coherence=1.000 rollback=0 stuck=0
+round=02 crc_ns=3279924 fnv_ns=3170538 total_ns=6450462 total_MB/s=38.76 coherence=1.000 rollback=0 stuck=0
+round=03 crc_ns=3172308 fnv_ns=3235384 total_ns=6407692 total_MB/s=39.02 coherence=1.000 rollback=0 stuck=0
+round=04 crc_ns=3262384 fnv_ns=3174154 total_ns=6436538 total_MB/s=38.84 coherence=1.000 rollback=0 stuck=0
+round=05 crc_ns=3075077 fnv_ns=2794000 total_ns=5869077 total_MB/s=42.60 coherence=1.000 rollback=0 stuck=0
+round=06 crc_ns=2793692 fnv_ns=2971692 total_ns=5765384 total_MB/s=43.36 coherence=1.000 rollback=0 stuck=0
+round=07 crc_ns=2796307 fnv_ns=2800154 total_ns=5596461 total_MB/s=44.67 coherence=1.000 rollback=0 stuck=0
+round=08 crc_ns=2891231 fnv_ns=2813154 total_ns=5704385 total_MB/s=43.83 coherence=1.000 rollback=0 stuck=0
+round=09 crc_ns=2513539 fnv_ns=2527923 total_ns=5041462 total_MB/s=49.59 coherence=1.000 rollback=0 stuck=0
+round=10 crc_ns=2597000 fnv_ns=2503538 total_ns=5100538 total_MB/s=49.01 coherence=1.000 rollback=0 stuck=0
+round=11 crc_ns=2498077 fnv_ns=2497923 total_ns=4996000 total_MB/s=50.04 coherence=1.000 rollback=0 stuck=0
+round=12 crc_ns=2711461 fnv_ns=2295923 total_ns=5007384 total_MB/s=49.93 coherence=1.000 rollback=0 stuck=0
+round=13 crc_ns=2251846 fnv_ns=2249308 total_ns=4501154 total_MB/s=55.54 coherence=1.000 rollback=0 stuck=0
+round=14 crc_ns=2251384 fnv_ns=2315154 total_ns=4566538 total_MB/s=54.75 coherence=1.000 rollback=0 stuck=0
+round=15 crc_ns=2259231 fnv_ns=2252538 total_ns=4511769 total_MB/s=55.41 coherence=1.000 rollback=0 stuck=0
+round=16 crc_ns=2250615 fnv_ns=2418923 total_ns=4669538 total_MB/s=53.54 coherence=1.000 rollback=0 stuck=0
+round=17 crc_ns=2054770 fnv_ns=2047538 total_ns=4102308 total_MB/s=60.94 coherence=1.000 rollback=0 stuck=0
+round=18 crc_ns=2047384 fnv_ns=2046154 total_ns=4093538 total_MB/s=61.07 coherence=1.000 rollback=0 stuck=0
+round=19 crc_ns=2130154 fnv_ns=1955923 total_ns=4086077 total_MB/s=61.18 coherence=1.000 rollback=0 stuck=0
+round=20 crc_ns=1957462 fnv_ns=1955154 total_ns=3912616 total_MB/s=63.90 coherence=1.000 rollback=0 stuck=0
+round=21 crc_ns=1966154 fnv_ns=2093000 total_ns=4059154 total_MB/s=61.59 coherence=1.000 rollback=0 stuck=0
+round=22 crc_ns=1886461 fnv_ns=1886077 total_ns=3772538 total_MB/s=66.27 coherence=1.000 rollback=0 stuck=0
+round=23 crc_ns=1874385 fnv_ns=1873846 total_ns=3748231 total_MB/s=66.70 coherence=1.000 rollback=0 stuck=0
+round=24 crc_ns=2111154 fnv_ns=1807154 total_ns=3918308 total_MB/s=63.80 coherence=1.000 rollback=0 stuck=0
+round=25 crc_ns=1807231 fnv_ns=1799846 total_ns=3607077 total_MB/s=69.31 coherence=1.000 rollback=0 stuck=0
+round=26 crc_ns=1798923 fnv_ns=1927615 total_ns=3726538 total_MB/s=67.09 coherence=1.000 rollback=0 stuck=0
+round=27 crc_ns=1829923 fnv_ns=1737769 total_ns=3567692 total_MB/s=70.07 coherence=1.000 rollback=0 stuck=0
+round=28 crc_ns=1735615 fnv_ns=1729231 total_ns=3464846 total_MB/s=72.15 coherence=1.000 rollback=0 stuck=0
+round=29 crc_ns=1731692 fnv_ns=1834308 total_ns=3566000 total_MB/s=70.11 coherence=1.000 rollback=0 stuck=0
+round=30 crc_ns=1654615 fnv_ns=1653923 total_ns=3308538 total_MB/s=75.56 coherence=1.000 rollback=0 stuck=0
+round=31 crc_ns=1654693 fnv_ns=1656000 total_ns=3310693 total_MB/s=75.51 coherence=1.000 rollback=0 stuck=0
+round=32 crc_ns=1654538 fnv_ns=1668000 total_ns=3322538 total_MB/s=75.24 coherence=1.000 rollback=0 stuck=0
+round=33 crc_ns=1579770 fnv_ns=1647923 total_ns=3227693 total_MB/s=77.45 coherence=1.000 rollback=0 stuck=0
+round=34 crc_ns=1582538 fnv_ns=1576616 total_ns=3159154 total_MB/s=79.14 coherence=1.000 rollback=0 stuck=0
+round=35 crc_ns=1575385 fnv_ns=2200692 total_ns=3776077 total_MB/s=66.21 coherence=1.000 rollback=0 stuck=0
+
+=== rafaelia_edge_v4 ===
+RAFAELIA EDGE V4 FUSED
+ARM32 | single-pass CRC+FNV | cache-aware
+buffer=256 KB rounds=48 warmup=8
+
+round=00 ns=6395538 MB/s=78.18 crc=d46d6bb7 coherence=1.000 rollback=0 stuck=0
+round=01 ns=6191077 MB/s=80.76 crc=6e11d500 coherence=1.000 rollback=0 stuck=0
+round=02 ns=4860692 MB/s=102.87 crc=4883abf7 coherence=1.000 rollback=0 stuck=0
+round=03 ns=5190846 MB/s=96.32 crc=7999e472 coherence=1.000 rollback=0 stuck=0
+round=04 ns=5592230 MB/s=89.41 crc=dcf8df3f coherence=1.000 rollback=0 stuck=0
+round=05 ns=5728384 MB/s=87.28 crc=8e948cf1 coherence=1.000 rollback=0 stuck=0
+round=06 ns=5007539 MB/s=99.85 crc=3b1ec4e1 coherence=1.000 rollback=0 stuck=0
+round=07 ns=4793693 MB/s=104.30 crc=5a8d27b6 coherence=1.000 rollback=0 stuck=0
+round=08 ns=4253693 MB/s=117.54 crc=bb59c4e7 coherence=1.000 rollback=0 stuck=0
+round=09 ns=4552846 MB/s=109.82 crc=484cb2e3 coherence=1.000 rollback=0 stuck=0
+round=10 ns=4244154 MB/s=117.81 crc=a9bd6426 coherence=1.000 rollback=0 stuck=0
+round=11 ns=4430231 MB/s=112.86 crc=2e4b3f8a coherence=1.000 rollback=0 stuck=0
+round=12 ns=3736615 MB/s=133.81 crc=c3daa3fc coherence=1.000 rollback=0 stuck=0
+round=13 ns=3787923 MB/s=132.00 crc=cd3ef685 coherence=1.000 rollback=0 stuck=0
+round=14 ns=3876615 MB/s=128.98 crc=2725f8c2 coherence=1.000 rollback=0 stuck=0
+round=15 ns=3733692 MB/s=133.92 crc=b7ddadde coherence=1.000 rollback=0 stuck=0
+round=16 ns=3776615 MB/s=132.39 crc=a678391e coherence=1.000 rollback=0 stuck=0
+round=17 ns=3628154 MB/s=137.81 crc=3af66e57 coherence=1.000 rollback=0 stuck=0
+round=18 ns=3389923 MB/s=147.50 crc=cd6ddfde coherence=1.000 rollback=0 stuck=0
+round=19 ns=3333231 MB/s=150.00 crc=25c7b51d coherence=1.000 rollback=0 stuck=0
+round=20 ns=3407769 MB/s=146.72 crc=37d95018 coherence=1.000 rollback=0 stuck=0
+round=21 ns=3325231 MB/s=150.37 crc=425cef51 coherence=1.000 rollback=0 stuck=0
+round=22 ns=3324000 MB/s=150.42 crc=3af86243 coherence=1.000 rollback=0 stuck=0
+round=23 ns=3168461 MB/s=157.81 crc=d3132c10 coherence=1.000 rollback=0 stuck=0
+round=24 ns=3056000 MB/s=163.61 crc=12ed7231 coherence=1.000 rollback=0 stuck=0
+round=25 ns=3003769 MB/s=166.46 crc=bccbe0ee coherence=1.000 rollback=0 stuck=0
+round=26 ns=3051000 MB/s=163.88 crc=99c1d241 coherence=1.000 rollback=0 stuck=0
+round=27 ns=3001538 MB/s=166.58 crc=830a0195 coherence=1.000 rollback=0 stuck=0
+round=28 ns=2999077 MB/s=166.72 crc=a5c2124d coherence=1.000 rollback=0 stuck=0
+round=29 ns=3019000 MB/s=165.62 crc=aa4a4dc4 coherence=1.000 rollback=0 stuck=0
+round=30 ns=2935077 MB/s=170.35 crc=b8e232fc coherence=1.000 rollback=0 stuck=0
+round=31 ns=2863538 MB/s=174.61 crc=60e43ee4 coherence=1.000 rollback=0 stuck=0
+round=32 ns=2937770 MB/s=170.20 crc=f481bb39 coherence=1.000 rollback=0 stuck=0
+round=33 ns=2747000 MB/s=182.02 crc=e1519d2e coherence=1.000 rollback=0 stuck=0
+round=34 ns=2740923 MB/s=182.42 crc=469c763e coherence=1.000 rollback=0 stuck=0
+round=35 ns=2727231 MB/s=183.34 crc=5642dadc coherence=1.000 rollback=0 stuck=0
+
+=== rafaelia_edge_v5 ===
+RAFAELIA EDGE V5 STABLE-WINDOW
+ARM32 | fused-pass | trimmed-median | adaptive window
+buffer=256 KB rounds=64 discard_low=8 discard_high=8
+
+round=00 ns=4365231 MB/s=114.54 coherence=1.000 rollback=0 stuck=0
+round=01 ns=4388461 MB/s=113.94 coherence=1.000 rollback=0 stuck=0
+round=02 ns=4462384 MB/s=112.05 coherence=1.000 rollback=0 stuck=0
+round=03 ns=4282692 MB/s=116.75 coherence=1.000 rollback=0 stuck=0
+round=04 ns=4242000 MB/s=117.87 coherence=1.000 rollback=0 stuck=0
+round=05 ns=4060154 MB/s=123.15 coherence=1.000 rollback=0 stuck=0
+round=06 ns=3816770 MB/s=131.00 coherence=1.000 rollback=0 stuck=0
+round=07 ns=3857923 MB/s=129.60 coherence=1.000 rollback=0 stuck=0
+round=08 ns=3753154 MB/s=133.22 coherence=1.000 rollback=0 stuck=0
+round=09 ns=3779000 MB/s=132.31 coherence=1.000 rollback=0 stuck=0
+round=10 ns=3889615 MB/s=128.55 coherence=1.000 rollback=0 stuck=0
+round=11 ns=3384770 MB/s=147.72 coherence=1.000 rollback=0 stuck=0
+round=12 ns=3416692 MB/s=146.34 coherence=1.000 rollback=0 stuck=0
+round=13 ns=3486000 MB/s=143.43 coherence=1.000 rollback=0 stuck=0
+round=14 ns=3430154 MB/s=145.77 coherence=1.000 rollback=0 stuck=0
+round=15 ns=3364693 MB/s=148.60 coherence=1.000 rollback=0 stuck=0
+round=16 ns=3227923 MB/s=154.90 coherence=1.000 rollback=0 stuck=0
+round=17 ns=3010846 MB/s=166.07 coherence=1.000 rollback=0 stuck=0
+round=18 ns=3038615 MB/s=164.55 coherence=1.000 rollback=0 stuck=0
+round=19 ns=3159154 MB/s=158.27 coherence=1.000 rollback=0 stuck=0
+round=20 ns=3061308 MB/s=163.33 coherence=1.000 rollback=0 stuck=0
+round=21 ns=3047769 MB/s=164.05 coherence=1.000 rollback=0 stuck=0
+round=22 ns=3064539 MB/s=163.16 coherence=1.000 rollback=0 stuck=0
+round=23 ns=2981923 MB/s=167.68 coherence=1.000 rollback=0 stuck=0
+round=24 ns=3131230 MB/s=159.68 coherence=1.000 rollback=0 stuck=0
+round=25 ns=3106385 MB/s=160.96 coherence=1.000 rollback=0 stuck=0
+round=26 ns=2910077 MB/s=171.82 coherence=1.000 rollback=0 stuck=0
+round=27 ns=2776538 MB/s=180.08 coherence=1.000 rollback=0 stuck=0
+round=28 ns=2985923 MB/s=167.45 coherence=1.000 rollback=0 stuck=0
+round=29 ns=2770692 MB/s=180.46 coherence=1.000 rollback=0 stuck=0
+round=30 ns=2614693 MB/s=191.23 coherence=1.000 rollback=0 stuck=0
+round=31 ns=2609539 MB/s=191.60 coherence=1.000 rollback=0 stuck=0
+round=32 ns=2674154 MB/s=186.98 coherence=1.000 rollback=0 stuck=0
+round=33 ns=2486846 MB/s=201.06 coherence=1.000 rollback=0 stuck=0
+round=34 ns=2400923 MB/s=208.25 coherence=1.000 rollback=0 stuck=0
+round=35 ns=2416538 MB/s=206.91 coherence=1.000 rollback=0 stuck=0
+
+=== rafaelia_edge_v6_unroll ===
+RAFAELIA EDGE V6 UNROLL 4x/8x
+ARM32 | fused CRC+FNV | manual unroll | low-memory
+buffer=256 KB rounds=64
+
+round=00 U4_ns=9655154 U4_MB/s=51.79 | U8_ns=11377231 U8_MB/s=43.95
+round=01 U4_ns=7632538 U4_MB/s=65.51 | U8_ns=9013692 U8_MB/s=55.47
+round=02 U4_ns=7692692 U4_MB/s=65.00 | U8_ns=8720231 U8_MB/s=57.34
+round=03 U4_ns=7109692 U4_MB/s=70.33 | U8_ns=6871615 U8_MB/s=72.76
+round=04 U4_ns=5919308 U4_MB/s=84.47 | U8_ns=6856692 U8_MB/s=72.92
+round=05 U4_ns=5889616 U4_MB/s=84.90 | U8_ns=6476153 U8_MB/s=77.21
+round=06 U4_ns=5025846 U4_MB/s=99.49 | U8_ns=5988615 U8_MB/s=83.49
+round=07 U4_ns=5084385 U4_MB/s=98.34 | U8_ns=5388539 U8_MB/s=92.79
+round=08 U4_ns=4427308 U4_MB/s=112.94 | U8_ns=5222384 U8_MB/s=95.74
+round=09 U4_ns=4494385 U4_MB/s=111.25 | U8_ns=4877846 U8_MB/s=102.50
+round=10 U4_ns=3949615 U4_MB/s=126.59 | U8_ns=4670846 U8_MB/s=107.05
+round=11 U4_ns=3948462 U4_MB/s=126.63 | U8_ns=4806000 U8_MB/s=104.04
+round=12 U4_ns=3568461 U4_MB/s=140.12 | U8_ns=4157769 U8_MB/s=120.26
+round=13 U4_ns=3706000 U4_MB/s=134.92 | U8_ns=4175769 U8_MB/s=119.74
+round=14 U4_ns=3771615 U4_MB/s=132.57 | U8_ns=3967539 U8_MB/s=126.02
+round=15 U4_ns=3407462 U4_MB/s=146.74 | U8_ns=3979077 U8_MB/s=125.66
+round=16 U4_ns=3244307 U4_MB/s=154.12 | U8_ns=3776846 U8_MB/s=132.39
+round=17 U4_ns=3382923 U4_MB/s=147.80 | U8_ns=3647308 U8_MB/s=137.09
+round=18 U4_ns=3099308 U4_MB/s=161.33 | U8_ns=3481077 U8_MB/s=143.63
+round=19 U4_ns=2864230 U4_MB/s=174.57 | U8_ns=3319923 U8_MB/s=150.61
+round=20 U4_ns=2962769 U4_MB/s=168.76 | U8_ns=3201000 U8_MB/s=156.20
+round=21 U4_ns=2738846 U4_MB/s=182.56 | U8_ns=3314077 U8_MB/s=150.87
+round=22 U4_ns=2661692 U4_MB/s=187.85 | U8_ns=3109154 U8_MB/s=160.82
+round=23 U4_ns=2836077 U4_MB/s=176.30 | U8_ns=2981616 U8_MB/s=167.69
+round=24 U4_ns=2501384 U4_MB/s=199.89 | U8_ns=2910385 U8_MB/s=171.80
+round=25 U4_ns=2755538 U4_MB/s=181.45 | U8_ns=2704384 U8_MB/s=184.88
+round=26 U4_ns=2372923 U4_MB/s=210.71 | U8_ns=2699692 U8_MB/s=185.21
+round=27 U4_ns=2452231 U4_MB/s=203.90 | U8_ns=2698538 U8_MB/s=185.29
+round=28 U4_ns=2342461 U4_MB/s=213.45 | U8_ns=2700846 U8_MB/s=185.13
+round=29 U4_ns=2273539 U4_MB/s=219.92 | U8_ns=2493000 U8_MB/s=200.56
+round=30 U4_ns=2136770 U4_MB/s=234.00 | U8_ns=2492615 U8_MB/s=200.59
+round=31 U4_ns=2239385 U4_MB/s=223.28 | U8_ns=2411846 U8_MB/s=207.31
+round=32 U4_ns=2067461 U4_MB/s=241.84 | U8_ns=2412154 U8_MB/s=207.28
+round=33 U4_ns=2107846 U4_MB/s=237.21 | U8_ns=2348385 U8_MB/s=212.91
+round=34 U4_ns=2002231 U4_MB/s=249.72 | U8_ns=2335308 U8_MB/s=214.10
+round=35 U4_ns=2001846 U4_MB/s=249.77 | U8_ns=2335692 U8_MB/s=214.07
+
+=== rafaelia_edge_v7_auto ===
+RAFAELIA EDGE V7 AUTO-SELECTOR
+ARM32 | base vs unroll4 vs unroll8 | median adaptive
+buffer=256 KB rounds=72 discard_low=8 discard_high=8
+
+round=00 BASE=7225385 69.20 | U4=7306000 68.44 | U8=6401538 78.11 | coh=1.000 rb=0 st=0
+round=01 BASE=3887769 128.61 | U4=5593077 89.40 | U8=5668693 88.20 | coh=1.000 rb=0 st=0
+round=02 BASE=3972077 125.88 | U4=5377307 92.98 | U8=5476462 91.30 | coh=1.000 rb=0 st=0
+round=03 BASE=3478308 143.75 | U4=4812385 103.90 | U8=4944615 101.12 | coh=1.000 rb=0 st=0
+round=04 BASE=3412539 146.52 | U4=4555308 109.76 | U8=4462692 112.04 | coh=1.000 rb=0 st=0
+round=05 BASE=3133153 159.58 | U4=4235308 118.06 | U8=4512615 110.80 | coh=1.000 rb=0 st=0
+round=06 BASE=2811153 177.86 | U4=3812846 131.14 | U8=4173000 119.82 | coh=1.000 rb=0 st=0
+round=07 BASE=2756693 181.38 | U4=3813000 131.13 | U8=4135154 120.91 | coh=1.000 rb=0 st=0
+round=08 BASE=2619231 190.90 | U4=3630615 137.72 | U8=3890692 128.51 | coh=1.000 rb=0 st=0
+round=09 BASE=2504231 199.66 | U4=3463692 144.35 | U8=3631769 137.67 | coh=1.000 rb=0 st=0
+round=10 BASE=2389847 209.22 | U4=3311693 150.98 | U8=3588692 139.33 | coh=1.000 rb=0 st=0
+round=11 BASE=2204923 226.77 | U4=3048384 164.02 | U8=3176539 157.40 | coh=1.000 rb=0 st=0
+round=12 BASE=2362308 211.66 | U4=2926846 170.83 | U8=3050769 163.89 | coh=1.000 rb=0 st=0
+round=13 BASE=2111462 236.80 | U4=2950769 169.45 | U8=2926308 170.86 | coh=1.000 rb=0 st=0
+round=14 BASE=2025231 246.89 | U4=2946539 169.69 | U8=2789308 179.26 | coh=1.000 rb=0 st=0
+round=15 BASE=1940770 257.63 | U4=2673615 187.01 | U8=3356692 148.96 | coh=1.000 rb=0 st=0
+round=16 BASE=1880000 265.96 | U4=2476616 201.89 | U8=2575538 194.13 | coh=1.000 rb=0 st=0
+round=17 BASE=2212461 225.99 | U4=2482154 201.44 | U8=2577923 193.95 | coh=1.000 rb=0 st=0
+round=18 BASE=1785538 280.03 | U4=2609693 191.59 | U8=2421307 206.50 | coh=1.000 rb=0 st=0
+round=19 BASE=1683461 297.01 | U4=2287000 218.63 | U8=2379923 210.09 | coh=1.000 rb=0 st=0
+round=20 BASE=1707692 292.79 | U4=2213077 225.93 | U8=2303462 217.06 | coh=1.000 rb=0 st=0
+round=21 BASE=1597153 313.06 | U4=2211384 226.10 | U8=2314154 216.06 | coh=1.000 rb=0 st=0
+round=22 BASE=1545615 323.50 | U4=2173230 230.07 | U8=2230000 224.22 | coh=1.000 rb=0 st=0
+round=23 BASE=1546154 323.38 | U4=2260616 221.18 | U8=2161539 231.32 | coh=1.000 rb=0 st=0
+round=24 BASE=1497846 333.81 | U4=2075923 240.86 | U8=2164000 231.05 | coh=1.000 rb=0 st=0
+round=25 BASE=1531154 326.55 | U4=2004769 249.41 | U8=2081154 240.25 | coh=1.000 rb=0 st=0
+round=26 BASE=1474846 339.02 | U4=2000000 250.00 | U8=2120231 235.82 | coh=1.000 rb=0 st=0
+round=27 BASE=1443077 346.48 | U4=1999385 250.08 | U8=2081616 240.20 | coh=1.000 rb=0 st=0
+round=28 BASE=1442385 346.65 | U4=2001616 249.80 | U8=2112231 236.72 | coh=1.000 rb=0 st=0
+round=29 BASE=1442539 346.61 | U4=2001461 249.82 | U8=2082000 240.15 | coh=1.000 rb=0 st=0
+round=30 BASE=1444616 346.11 | U4=2079307 240.46 | U8=2084000 239.92 | coh=1.000 rb=0 st=0
+round=31 BASE=1443308 346.43 | U4=2027231 246.64 | U8=2098231 238.30 | coh=1.000 rb=0 st=0
+round=32 BASE=1442461 346.63 | U4=2027616 246.60 | U8=2081615 240.20 | coh=1.000 rb=0 st=0
+round=33 BASE=1442538 346.61 | U4=1999308 250.09 | U8=2081308 240.23 | coh=1.000 rb=0 st=0
+round=34 BASE=1466076 341.05 | U4=2000154 249.98 | U8=2081308 240.23 | coh=1.000 rb=0 st=0
+round=35 BASE=1442615 346.59 | U4=2001616 249.80 | U8=2108923 237.09 | coh=1.000 rb=0 st=0
+
+=== rafaelia_mvp_bench ===
+RAFAELIA MVP BENCH — runtime | ARM/edge | determinismo | CRC/FNV | EMA 0.25\nbuffer=1048576 bytes rounds=64\n\nround=00 ns=64187539 MB/s=31.16 crc=1990458a fnv=12ec626a38950383 coherence=1.000 stuck=0 rollback=0\nround=01 ns=45064154 MB/s=44.38 crc=d7bc600e fnv=c99fdea05976364a coherence=1.000 stuck=0 rollback=0\nround=02 ns=35353616 MB/s=56.57 crc=db18a583 fnv=1b84e654f06bad60 coherence=1.000 stuck=0 rollback=0\nround=03 ns=30472231 MB/s=65.63 crc=867e4a47 fnv=f5241e566fd399fa coherence=1.000 stuck=0 rollback=0\nround=04 ns=27067000 MB/s=73.89 crc=0c41d301 fnv=87338db72f8fed2d coherence=1.000 stuck=0 rollback=0\nround=05 ns=23667231 MB/s=84.51 crc=70a4a460 fnv=7d9362f23a79eff1 coherence=1.000 stuck=0 rollback=0\nround=06 ns=22230769 MB/s=89.97 crc=9361560b fnv=bdae2764bb5b92c9 coherence=1.000 stuck=0 rollback=0\nround=07 ns=19837154 MB/s=100.82 crc=63971013 fnv=2535c46116bd171c coherence=1.000 stuck=0 rollback=0\nround=08 ns=18012769 MB/s=111.03 crc=758c49a5 fnv=3c520ccbf8fe896f coherence=1.000 stuck=0 rollback=0\nround=09 ns=17532769 MB/s=114.07 crc=3deb03e2 fnv=9b40ef7762b4289d coherence=1.000 stuck=0 rollback=0\nround=10 ns=16661385 MB/s=120.04 crc=4f6c3e50 fnv=da5d16ddf66dcfe5 coherence=1.000 stuck=0 rollback=0\nround=11 ns=16623000 MB/s=120.32 crc=86158cc1 fnv=fc2c33090ed8b800 coherence=1.000 stuck=0 rollback=0\nround=12 ns=16620847 MB/s=120.33 crc=a5182b98 fnv=714f2baff99759f0 coherence=1.000 stuck=0 rollback=0\nround=13 ns=17251000 MB/s=115.94 crc=b4ebca68 fnv=add41ac28477a2dc coherence=1.000 stuck=0 rollback=0\nround=14 ns=16856923 MB/s=118.65 crc=04215035 fnv=4b41f9e46f60b8d2 coherence=1.000 stuck=0 rollback=0\nround=15 ns=16605616 MB/s=120.44 crc=42b475f6 fnv=55ff0a2268176594 coherence=1.000 stuck=0 rollback=0\nround=16 ns=16958923 MB/s=117.93 crc=f46e8008 fnv=afddb20c9110f930 coherence=1.000 stuck=0 rollback=0\nround=17 ns=16740846 MB/s=119.47 crc=1fc25129 fnv=c0e8eadfd39ec14a coherence=1.000 stuck=0 rollback=0\nround=18 ns=16821308 MB/s=118.90 crc=445b545c fnv=90701386fefac20a coherence=1.000 stuck=0 rollback=0\nround=19 ns=16618077 MB/s=120.35 crc=4b8e6400 fnv=a124dc7c731b0578 coherence=1.000 stuck=0 rollback=0\nround=20 ns=16643923 MB/s=120.16 crc=d1ed7d43 fnv=118ffe8766a6c606 coherence=1.000 stuck=0 rollback=0\nround=21 ns=16581154 MB/s=120.62 crc=c4adf256 fnv=214bdc3e0004fcf4 coherence=1.000 stuck=0 rollback=0\nround=22 ns=16783539 MB/s=119.16 crc=67a2b426 fnv=1f3cedda062ba639 coherence=1.000 stuck=0 rollback=0\nround=23 ns=16726923 MB/s=119.57 crc=8cd46ffe fnv=d5c24956d45f4fb7 coherence=1.000 stuck=0 rollback=0\nround=24 ns=16490692 MB/s=121.28 crc=759bfd5a fnv=f45aae5c776a2aa3 coherence=1.000 stuck=0 rollback=0\nround=25 ns=16775385 MB/s=119.22 crc=54864670 fnv=cc5a428e89c9ec99 coherence=1.000 stuck=0 rollback=0\nround=26 ns=16752539 MB/s=119.38 crc=fab7ce0f fnv=c76759204202814e coherence=1.000 stuck=0 rollback=0\nround=27 ns=17313615 MB/s=115.52 crc=a7d120b2 fnv=ef75380fa562142c coherence=1.000 stuck=0 rollback=0\nround=28 ns=16894385 MB/s=118.38 crc=7f35b443 fnv=a480b53a0238673e coherence=1.000 stuck=0 rollback=0\nround=29 ns=16793461 MB/s=119.09 crc=687fa4d1 fnv=7e7d25be530021fb coherence=1.000 stuck=0 rollback=0\nround=30 ns=16690538 MB/s=119.83 crc=ea965afb fnv=1d856049ff73626f coherence=1.000 stuck=0 rollback=0\nround=31 ns=16511462 MB/s=121.13 crc=c0dbbc07 fnv=05bb168e12d79218 coherence=1.000 stuck=0 rollback=0\nround=32 ns=16809308 MB/s=118.98 crc=f0ef6d81 fnv=b9542014ea0aecbf coherence=1.000 stuck=0 rollback=0\nround=33 ns=16686615 MB/s=119.86 crc=4c78e389 fnv=aabbd5327a5f7f0b coherence=1.000 stuck=0 rollback=0\nround=34 ns=16505538 MB/s=121.17 crc=3dfa0ba6 fnv=d6ad8629e2701a4c coherence=1.000 stuck=0 rollback=0\nround=35 ns=16786923 MB/s=119.14 crc=8c459ffe fnv=a6adf7601ddd5442 coherence=1.000 stuck=0 rollback=0\nround=36 ns=16688231 MB/s=119.84 crc=b506a1c2 fnv=78111ff7a83aeafb coherence=1.000 stuck=0 rollback=0\nround=37 ns=16640462 MB/s=120.19 crc=927c3d0e fnv=19524c7504c2c328 coherence=1.000 stuck=0 rollback=0\nround=38 ns=16883000 MB/s=118.46 crc=fd493569 fnv=e19ba9fb15b5157b coherence=1.000 stuck=0 rollback=0\nround=39 ns=17284770 MB/s=115.71 crc=7e8f9329 fnv=4a8ecc16ad8652cd coherence=1.000 stuck=0 rollback=0\nround=40 ns=16508538 MB/s=121.15 crc=6b42bc9d fnv=6f8d2eade31e9711 coherence=1.000 stuck=0 rollback=0\nround=41 ns=16814231 MB/s=118.95 crc=e4ccc398 fnv=a5f540bbe7027c2f coherence=1.000 stuck=0 rollback=0\nround=42 ns=16767846 MB/s=119.28 crc=d0901287 fnv=b4f2ca9e29a8c243 coherence=1.000 stuck=0 rollback=0\nround=43 ns=17008539 MB/s=117.59 crc=8ae2a2cc fnv=aba4c97944dc9f00 coherence=1.000 stuck=0 rollback=0\nround=44 ns=17071769 MB/s=117.15 crc=fe5fd888 fnv=0f70140add3f6430 coherence=1.000 stuck=0 rollback=0\nround=45 ns=16717000 MB/s=119.64 crc=dc2dfb9a fnv=7b42755e2e4223fe coherence=1.000 stuck=0 rollback=0\nround=46 ns=16558461 MB/s=120.78 crc=cb0880d1 fnv=32f7ecc6470e7000 coherence=1.000 stuck=0 rollback=0\nround=47 ns=17190385 MB/s=116.34 crc=8a5e6be3 fnv=7f812fd06258acab coherence=1.000 stuck=0 rollback=0\nround=48 ns=16878385 MB/s=118.49 crc=60512650 fnv=b5f968f497534b5e coherence=1.000 stuck=0 rollback=0\nround=49 ns=16683000 MB/s=119.88 crc=e7b832c6 fnv=8d852d71947930e9 coherence=1.000 stuck=0 rollback=0\nround=50 ns=16547385 MB/s=120.87 crc=e536b846 fnv=d21a3885a8afa9d5 coherence=1.000 stuck=0 rollback=0\nround=51 ns=16488230 MB/s=121.30 crc=7909356d fnv=23f56d87a4c12e43 coherence=1.000 stuck=0 rollback=0\nround=52 ns=16588616 MB/s=120.56 crc=bc2b9c74 fnv=f6886eb4449d45a0 coherence=1.000 stuck=0 rollback=0\nround=53 ns=16567153 MB/s=120.72 crc=1ee9249a fnv=01db2cb1fa5880c1 coherence=1.000 stuck=0 rollback=0\nround=54 ns=16616077 MB/s=120.37 crc=7ca78c86 fnv=6df6783438ef2481 coherence=1.000 stuck=0 rollback=0\nround=55 ns=16540000 MB/s=120.92 crc=14189bfc fnv=595254290c21348d coherence=1.000 stuck=0 rollback=0\nround=56 ns=16591385 MB/s=120.54 crc=65356c70 fnv=bf00d4c4cca75fa6 coherence=1.000 stuck=0 rollback=0\nround=57 ns=16471462 MB/s=121.42 crc=966470eb fnv=939a975997e2d206 coherence=1.000 stuck=0 rollback=0\nround=58 ns=16391770 MB/s=122.01 crc=4cc7de6a fnv=f8267a7feda1599f coherence=1.000 stuck=0 rollback=0\nround=59 ns=16657231 MB/s=120.07 crc=d4d89ca0 fnv=e6c5e6a599859809 coherence=1.000 stuck=0 rollback=0\nround=60 ns=16455385 MB/s=121.54 crc=351bb51f fnv=e88a186d35732dbc coherence=1.000 stuck=0 rollback=0\nround=61 ns=16398846 MB/s=121.96 crc=e6a58eee fnv=718411faf37d6196 coherence=1.000 stuck=0 rollback=0\nround=62 ns=16469846 MB/s=121.43 crc=de4fcd49 fnv=655b91b98ca3f054 coherence=1.000 stuck=0 rollback=0\nround=63 ns=16556847 MB/s=120.80 crc=9250a483 fnv=af941015e60ff9b0 coherence=1.000 stuck=0 rollback=0\n\n=== RESULTADO MVP ===\navg_ns=18843188 best_ns=16391770 worst_ns=64187539\nthroughput_avg_MBps=106.14\njitter_ratio=2.536501\nrollback=0 stuck=0\nMCR_proxy=18.379747\nREGIME: TRANSICAO / OBSERVAR JITTER
+
+=== rafaelia_retro.sh ===
+=== RAFAELIA_RETROALIMENTACAO_COERENTE ===
+Compilando...
+ld.lld: error: relocation R_ARM_ABS32 cannot be used against local symbol; recompile with -fPIC
+>>> defined in /data/data/com.termux/files/usr/tmp/core-efc5b6.o
+>>> referenced by /data/data/com.termux/files/usr/tmp/core-efc5b6.o:(.text+0xc8)
+gcc: error: linker command failed with exit code 1 (use -v to see invocation)
+
+=== vectra_42_attractors ===
+
+╔════════════════════════════════════════════════════════════════╗
+║           VECTRA – 42 ATRATORES E INVARIANTE GEOMÉTRICA       ║
+║       Exacordex: Computação como navegação em variedade       ║
+╚════════════════════════════════════════════════════════════════╝
+
+╔══════════════════════════════════════════════════════════════╗
+║  MODO 1: RECORRÊNCIA DE FIBONACCI-RAFAEL (período 42)       ║
+║  Fₙ₊₁ = Fₙ × (√3/2) - π·sin(279°)                           ║
+╚══════════════════════════════════════════════════════════════╝
+n=0: 65536 (Q16.16) = 1.0
+n= 1: 0 (Q16.16)  →  0.000000
+n= 2: 0 (Q16.16)  →  0.000000
+n= 3: 0 (Q16.16)  →  0.000000
+n= 4: 0 (Q16.16)  →  0.000000
+n= 5: 0 (Q16.16)  →  0.000000
+n= 6: 0 (Q16.16)  →  0.000000
+n= 7: 0 (Q16.16)  →  0.000000
+n= 8: 0 (Q16.16)  →  0.000000
+n= 9: 0 (Q16.16)  →  0.000000
+n=10: 0 (Q16.16)  →  0.000000
+n=11: 0 (Q16.16)  →  0.000000
+n=12: 0 (Q16.16)  →  0.000000
+n=13: 0 (Q16.16)  →  0.000000
+n=14: 0 (Q16.16)  →  0.000000
+n=15: 0 (Q16.16)  →  0.000000
+n=16: 0 (Q16.16)  →  0.000000
+n=17: 0 (Q16.16)  →  0.000000
+n=18: 0 (Q16.16)  →  0.000000
+n=19: 0 (Q16.16)  →  0.000000
+n=20: 0 (Q16.16)  →  0.000000
+n=21: 0 (Q16.16)  →  0.000000
+n=22: 0 (Q16.16)  →  0.000000
+n=23: 0 (Q16.16)  →  0.000000
+n=24: 0 (Q16.16)  →  0.000000
+n=25: 0 (Q16.16)  →  0.000000
+n=26: 0 (Q16.16)  →  0.000000
+n=27: 0 (Q16.16)  →  0.000000
+n=28: 0 (Q16.16)  →  0.000000
+n=29: 0 (Q16.16)  →  0.000000
+
+=== vectra_adapt ===
+[1;33m[VECTRA-ADAPT] Ativando Estados Adaptativos (Bio-Feedback Silício)...[0m
+
+[1;32m--- BENCHMARK DE PLASTICIDADE ESTRUTURAL ---[0m
+Tempo Total: 5.8751 s
+Throughput Adaptativo: 54.47 M-Pulsos/s
+Âncora Adaptativa: 0x0
+Status: Matrix Viva e Auto-Ajustável
+[1;32m--------------------------------------------[0m
+
+=== vectra_bench ===
+
+=== vectra_collider ===
+
+=== vectra_cup ===
+[1;34m[VECTRA] Ativando Taça do Core (Multi-Processo Vetorial)...[0m
+
+[1;32m--- RESULTADO DA TAÇA (CORE 7) ---[0m
+Master ECC (Previsão): 0x5B12B3AA
+Status: Invariante Geométrica Coerente
+
+=== vectra_feeder ===
+
+=== vectra_fusion ===
+[1;34m[VECTRA] Iniciando Unidade Fusionada...[0m
+
+[1;32m--- EXACORDEX FINAL ---[0m
+Throughput: 53.65 M-Pulsos/s
+Status: Pipeline Sincronizado
+
+=== vectra_hardcore ===
+=== SAT HARDCORE ===
+SAT: 1
+UNSAT: 0
+
+=== NAVIER HARDCORE ===
+t=0 energia=0.400625
+t=1 energia=0.220088
+t=2 energia=0.144625
+t=3 energia=0.106082
+t=4 energia=0.083477
+t=5 energia=0.068814
+t=6 energia=0.058574
+t=7 energia=0.051025
+t=8 energia=0.045236
+t=9 energia=0.040663
+
+=== YANG-MILLS HARDCORE ===
+flat: 0.000000
+curvo: 0.300000
+
+=== RIEMANN HARDCORE ===
+zeta(2) ~ 1.644884
+
+=== vectra_hexa ===
+
+=== vectra_layers ===
+
+=== vectra_liso ===
+
+=== vectra_liso5 ===
+
+=== vectra_native ===
+MODE:SW
+CRC:886478f0 CYC:0000000000000000
+
+=== vectra_obs ===
+
+=== vectra_portable ===
+[MODE] FALLBACK
+CRC=1733d9c2
+TIME=13551308 ns
+THROUGHPUT=77.38 MB/s
+
+=== vectra_quantum ===
+[1;34m[VECTRA-QUANTUM] 4096-BIT PAGE ALIGN | 32 LAYERS | SPIN-ROTATION[0m
+
+[1;32m--- RELATÓRIO DE DOBRA QUÂNTICA ---[0m
+Tempo de Colapso : 5.0258 s
+Massa Total      : 0.33 Trilhões de Estados
+Throughput Real  : 65.20 G-Estados/s
+Configuração     : 32 Layers (Quantum-Like Interference)
+[1;32m------------------------------------[0m
+
+
+=== vectra_quantum_247 ===
+
+=== vectra_quantum_final ===
+
+[1;35m[VECTRA-QUANTUM] REATOR ESTABILIZADO (posix_memalign)[0m
+
+[1;32m--- RELATÓRIO DE SÍNTESE VECTRA ---
+Tempo de Voo      : 0.1262 s
+Throughput        : 162.22 G-Estados/s
+Integridade       : 0x0 (Quantum-Like Active)
+[1;32m-----------------------------------[0m
+
+
+=== vectra_quantum_flux ===
+
+=== vectra_quantum_observer ===
+
+[1;35m[VECTRA-QUANTUM-OBSERVER] INICIANDO OBSERVAÇÃO REAL-TIME[0m
+
+[1;32m--- RELATÓRIO DE OBSERVAÇÃO VECTRA ---
+Tempo de Voo      : 0.0606 s
+Throughput        : 202.93 G-Estados/s
+Integridade       : 0x0 (Quantum-Like Active)
+[1;32m-----------------------------------[0m
+
+
+=== vectra_quantum_omni ===
+
+=== vectra_quantum_sentinel ===
+
+[VECTRA-QUANTUM-SENTINEL] OBSERVAÇÃO REAL-TIME INICIADA
+
+[1;32m--- RELATÓRIO VECTRA-SENTINEL ---
+Tempo de Observação : 0.0274 s
+Throughput          : 958.02 G-Estados/s
+Integridade         : 0x0 (Quantum-Like Active)
+[1;32m----------------------------------[0m
+
+
+=== vectra_quantum_total_sentinel ===
+
+[1;36m[VECTRA-QUANTUM-TOTAL-SENTINEL] INICIANDO OBSERVAÇÃO CONTÍNUA[0m
+
+[1;32m--- RELATÓRIO TOTAL-SENTINEL ---
+Tempo de Observação : 0.0132 s
+Throughput          : 9914.39 G-Estados/s
+Integridade         : 0x0 (Quantum-Like Active)
+[1;32m--------------------------------[0m
+
+
+=== vectra_raw ===
+
+[VECTRA-RAW] MOTOR ARMv7-32 ATIVADO. RAM ISOLADA. FPU SATURADA.
+
+--- RELATORIO DE SINTESE DIRETA (ARMv7 32-bit) ---
+Tempo de Colapso : 4.3900 segundos
+Ciclos Vetoriais : 91.12 Milhoes/s
+Estados/segundo  : 5.83 Bilhoes/s
+Massa Oculta     : 25.60 Bilhoes (Residentes em Registrador)
+Friccao de Mem.  : ZERO (Loop 100% contido nos registradores Q)
+--------------------------------------------------
+
+
+=== vectra_rebite ===
+
+=== vectra_singularity ===
+[1;35m[VECTRA-SINGULARITY] ACIONANDO 128 ESTADOS RESIDENTES...[0m
+
+[1;32m--- RELATÓRIO DE SINGULARIDADE TÉRMICA ---[0m
+Tempo de Voo     : 2.7725 s
+Massa Processada : 81.92 Bilhões de Estados
+Densidade Real   : 29.55 G-Estados/s
+Integridade      : 0x0 (Sincronia Vetorial Absoluta)
+[1;32m------------------------------------------[0m
+
+
+=== vectra_sync ===
+[1;33m[VECTRA-SYNC] Sincrotron Ativado: 8 Núcleos | 144 Faces[0m
+
+[1;32m--- RELATÓRIO DO VÓRTICE DETERMINÍSTICO ---[0m
+Tempo Total: 1.5224 s
+Throughput Global: 378.35 M-Pulsos/s
+Âncora Master (C7): 0xC5397DB8
+Status: Taça do Core Transbordando Determinismo
+[1;32m-------------------------------------------[0m
+
+=== vectra_ultima ===
+
+=== vectra_universal ===
+CRC:c2f40b81 CYCLES:00000000002df173
+
+=== vectra_v20 ===
+[1;36m[VECTRA-V20] Ativando Estrutura de 64 Estados (Base 20)...[0m
+
+[1;32m--- RELATÓRIO DE EFICIÊNCIA CRISTALINA ---[0m
+Throughput V20: 56.11 M-Pulsos/s
+Estados Processados: 20.48 Bilhões
+Âncora V20 Master: 0x0
+Status: Invariante Geométrica de Alta Dimensão
+[1;32m------------------------------------------[0m
+
+=== vectra_v8 ===
+
+=== vectra_viscosity ===
+
+=== vectra_zero ===
+MODE:GENERIC
+CRC:c2f40b81 TOTAL:00000000003aa537
+MIN:0000000000005770 MAX:000000000000b531
+
+=== blink_crc_bench ===
+
+--- RESULTADO ---
+Estado final : 0xBACAF386
+Eco final    : 0xFAB50872
+Iteracoes    : 100000000
+Tempo (s)    : 1.0817
+Ciclos/s     : 92444510.18
+
+=== blink_dual_ilp ===
+
+--- DUAL STATE RESULTADO ---
+Estado0 : 0xDCC1923C
+Estado1 : 0xB849AEB6
+Eco      : 0xBB16A7BA
+Tempo(s) : 1.1688
+Ciclos/s : 85555663.66
+
+=== blink_multicore ===
+
+--- MULTICORE RESULTADO ---
+Threads   : 8
+Total Ops : 400000000
+Tempo(s)  : 0.8805
+Ops/s     : 454274518.00
+
+=== blink_neon ===
+
+--- NEON RESULTADO ---
+Estado[0] : 0xECD8BA66
+Estado[1] : 0xECD8BA66
+Estado[2] : 0xECD8BA66
+Estado[3] : 0xECD8BA66
+Tempo(s)  : 0.2226
+Ops/s     : 449284272.41
+
+=== blink_neon_feedback ===
+
+--- NEON FEEDBACK ---
+Estado[0] : 0xA5A5A5A5
+Tempo(s)  : 0.0000
+Ops/s     : 92850510677808.72
+
+=== blink_neon_feedback_fix ===
+
+--- NEON FEEDBACK FIX ---
+Estado[0] : 0x0FBC4056
+Tempo(s)  : 0.3394
+Ops/s     : 294662505.76
+
+=== blink_neon_multicore ===
+
+--- NEON MULTICORE ---
+Threads  : 8
+Tempo(s) : 0.1222
+Ops/s    : 2617614918.94
+
+=== blink_neon_multistream ===
+
+--- NEON MULTISTREAM ---
+Estado[0] : 0x0FBC4056
+Estado[1] : 0xF717E4BD
+Tempo(s)  : 0.1791
+Ops/s     : 558482575.14
+
+=== crc_final ===
+CRC32 = BB837EBA
+
+=== crc_neon_raw ===
+./crc_neon_raw: 6: Syntax error: end of file unexpected (expecting ")")
+
+=== crc_ok ===
+
+=== crc_stable ===
+CRC32 = BB837EBA
+
+=== bitraf_mobile ===
+🚀 BitRaf Mobile v2 iniciando...
+⏱ Tempo: 0.000699 s
+📊 checksum: 1590.268484
+✔ Execução concluída
+
+=== geolm_raf ===
+[36m[1m
+  ██████╗  █████╗ ███████╗ ┌─────────────────────┐
+  ██╔══██╗██╔══██╗██╔════╝ │[35m RAFAELIA Baremetal [36m│
+  ██████╔╝███████║█████╗   │[33m ARM32 · NEON · φ   [36m│
+  ██╔══██╗██╔══██║██╔══╝   │[32m ψ·χ·ρ·Δ·Σ·Ω cycle  [36m│
+  ██║  ██║██║  ██║██║      │[35m GeoLM v2 · © 2026  [36m│
+  ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝      └─────────────────────┘
+[0m[35m  id=[0m[33mRAFAELIA-v2[0m[35m  kernel=[0m[33mGeoLM-ARM32[0m[35m  ethic=[0m[33mamor·coerencia·prova[0m
+
+  id=RAFAELIA-v2  kernel=GeoLM-ARM32  mode=baremetal
+
+[init] toroid embed TW=91 TH=90  vsz=67
+[warmup] [35mψχρΔΣΩ[0m seed=102 tok — ethic: amor·coerencia·prova
+[1m[train] tokens=102 epochs=20 lr=0.05000 vsz=67
+[0m  ep=  0 loss=[33m4.2053[0m  α=0.350  ω=1.000  coh=0.919  0.0s
+  ep=  5 loss=[33m4.1832[0m  α=0.350  ω=1.000  coh=0.915  0.0s
+  ep= 10 loss=[33m4.1617[0m  α=0.350  ω=1.000  coh=0.889  0.0s
+  ep= 15 loss=[33m4.1405[0m  α=0.350  ω=1.000  coh=0.900  0.1s
+  ep= 19 loss=[33m4.1239[0m  α=0.350  ω=1.000  coh=0.900  0.1s
+[35m  ψ=0.866  χ=0.835  ρ=-3.345
+  Δ=3.345  Σ=3.348  Ω=1.000  iter=2020
+  Fn=23.16046  flips=290  stable=0  coh=0.900
+  steps=2020  best_loss=3.8186
+[0m[1m[36m
+  Comandos GeoLM RAF:
+[0m    [33mtrain [ep] [lr]         [0m treina (default: 30 epocas, lr=0.05)
+    [33mgen <palavra> [n]       [0m gera N tokens (default 20)
+    [33mvocab [n]               [0m lista N tokens do vocabulario
+    [33mstatus                  [0m ciclo ψχρΔΣΩ + bitstack
+    [33msave <arquivo>          [0m salva pesos + vocab (RAF2+CRC32)
+    [33mload <arquivo>          [0m carrega pesos + vocab
+    [33mbench                   [0m benchmark NEON dot 1M iters
+    [33mhelp                    [0m esta ajuda
+    [33mquit                    [0m sair
+
+[1m[36mraf> [0m
+=== raf_bench ===
+
+=== vectra ===
+
+

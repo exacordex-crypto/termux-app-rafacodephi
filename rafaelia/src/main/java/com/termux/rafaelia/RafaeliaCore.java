@@ -21,6 +21,8 @@ public final class RafaeliaCore {
     public static final ByteBuffer OUT_BUF;
     public static final ByteBuffer STATE_BUF;
     private static final boolean _libLoaded;
+    private static final Object JNI_LOCK = new Object();
+    private static final int CYCLE_PERIOD = 42;
 
     static {
         // allocateDirect não vai para o heap Java — usa memória nativa
@@ -111,6 +113,19 @@ public final class RafaeliaCore {
     public static native int getMemoryLayersNative(ByteBuffer out, int cap);
     public static native int getClockNative(ByteBuffer out, int cap);
 
+    private static int safeInputLength(byte[] data, int len) {
+        if (data == null || len <= 0) return 0;
+        int safeLen = len;
+        if (safeLen > data.length) safeLen = data.length;
+        if (safeLen > IN_CAP) safeLen = IN_CAP;
+        return safeLen > 0 ? safeLen : 0;
+    }
+
+    private static int safeOutputLength(int nativeLen) {
+        if (nativeLen <= 0) return 0;
+        return nativeLen > OUT_CAP ? OUT_CAP : nativeLen;
+    }
+
     // ── API pública — sem alocações ────────────────────────────────────
 
     /**
@@ -125,47 +140,50 @@ public final class RafaeliaCore {
      * VERIFY compara crc32Native(data) com crc retornado do pipeline nativo.
      */
     public static CommitGateResult processWithCommitGate(byte[] data, int len) {
-        if (!_libLoaded || data == null || len <= 0) {
-            return new CommitGateResult(false, 0, 0, 0, 0);
-        }
-        if (len > IN_CAP) len = IN_CAP;
-
-        IN_BUF.clear();
-        IN_BUF.put(data, 0, len);
-        OUT_BUF.clear();
-
-        int written = processNative(IN_BUF, len, OUT_BUF);
-        if (written < 8) {
+        int safeLen = safeInputLength(data, len);
+        if (!_libLoaded || safeLen == 0) {
             return new CommitGateResult(false, 0, 0, 0, 0);
         }
 
-        OUT_BUF.position(0);
-        int crcFromPipe = OUT_BUF.getInt();
-        int phi = OUT_BUF.getInt();
-        int phase = written >= 12 ? OUT_BUF.getInt() : 0;
-        int step = written >= 16 ? OUT_BUF.getInt() : 0;
+        synchronized (JNI_LOCK) {
+            IN_BUF.clear();
+            IN_BUF.put(data, 0, safeLen);
+            OUT_BUF.clear();
 
-        int crcFromVerify = crc32(data, len);
-        boolean ok = (crcFromPipe == crcFromVerify);
-        return new CommitGateResult(ok, crcFromPipe, phi, phase, step);
+            int written = safeOutputLength(processNative(IN_BUF, safeLen, OUT_BUF));
+            if (written < 8) {
+                return new CommitGateResult(false, 0, 0, 0, 0);
+            }
+
+            OUT_BUF.position(0);
+            int crcFromPipe = OUT_BUF.getInt();
+            int phi = OUT_BUF.getInt();
+            int phase = written >= 12 ? OUT_BUF.getInt() : 0;
+            int step = written >= 16 ? OUT_BUF.getInt() : 0;
+
+            int crcFromVerify = crc32Locked(data, safeLen);
+            boolean ok = (crcFromPipe == crcFromVerify);
+            return new CommitGateResult(ok, crcFromPipe, phi, phase, step);
+        }
     }
 
     public static int process(byte[] data, int len) {
-        if (!_libLoaded || data == null || len <= 0) return 0;
-        if (len > IN_CAP) len = IN_CAP;
+        int safeLen = safeInputLength(data, len);
+        if (!_libLoaded || safeLen == 0) return 0;
 
-        // Copia para DirectByteBuffer — System.arraycopy é JIT-intrinsic
-        IN_BUF.clear();
-        IN_BUF.put(data, 0, len);
-        OUT_BUF.clear();
+        synchronized (JNI_LOCK) {
+            IN_BUF.clear();
+            IN_BUF.put(data, 0, safeLen);
+            OUT_BUF.clear();
 
-        int written = processNative(IN_BUF, len, OUT_BUF);
-        if (written < 8) return 0;
+            int written = safeOutputLength(processNative(IN_BUF, safeLen, OUT_BUF));
+            if (written < 8) return 0;
 
-        // Lê phi (bytes 4..7)
-        OUT_BUF.position(0);
-        OUT_BUF.getInt(); // skip crc
-        return OUT_BUF.getInt(); // phi
+            // Lê phi (bytes 4..7)
+            OUT_BUF.position(0);
+            OUT_BUF.getInt(); // skip crc
+            return OUT_BUF.getInt(); // phi
+        }
     }
 
     /**
@@ -174,9 +192,11 @@ public final class RafaeliaCore {
      */
     public static int step() {
         if (!_libLoaded) return 0;
-        int phi = stepNative(STATE_BUF, _cycle);
-        _cycle = (_cycle + 1) % 42;
-        return phi;
+        synchronized (JNI_LOCK) {
+            int phi = stepNative(STATE_BUF, _cycle);
+            if (phi >= 0) _cycle = (_cycle + 1) % CYCLE_PERIOD;
+            return phi;
+        }
     }
 
     /**
@@ -185,26 +205,33 @@ public final class RafaeliaCore {
      */
     public static String getHwProfile() {
         if (!_libLoaded) return "{}";
-        OUT_BUF.clear();
-        long n = profileNative(OUT_BUF, OUT_CAP);
-        if (n <= 0) return "{}";
-        byte[] tmp = new byte[(int)n];
-        OUT_BUF.position(0);
-        OUT_BUF.get(tmp, 0, (int)n);
-        return new String(tmp, 0, (int)n); // único String alloc
+        synchronized (JNI_LOCK) {
+            OUT_BUF.clear();
+            long nativeLen = profileNative(OUT_BUF, OUT_CAP);
+            int n = nativeLen > OUT_CAP ? OUT_CAP : (int) nativeLen;
+            if (n <= 0) return "{}";
+            byte[] tmp = new byte[n];
+            OUT_BUF.position(0);
+            OUT_BUF.get(tmp, 0, n);
+            return new String(tmp, 0, n); // único String alloc
+        }
     }
 
     /**
      * CRC32C de byte array — sem criar ByteBuffer temporário.
      */
     public static int crc32(byte[] data, int len) {
-        if (!_libLoaded || data == null || len <= 0) return 0;
-        if (len > data.length) len = data.length;
-        if (len > IN_CAP) len = IN_CAP;
-        if (len <= 0) return 0;
+        int safeLen = safeInputLength(data, len);
+        if (!_libLoaded || safeLen == 0) return 0;
+        synchronized (JNI_LOCK) {
+            return crc32Locked(data, safeLen);
+        }
+    }
+
+    private static int crc32Locked(byte[] data, int safeLen) {
         IN_BUF.clear();
-        IN_BUF.put(data, 0, len);
-        return crc32Native(IN_BUF, len);
+        IN_BUF.put(data, 0, safeLen);
+        return crc32Native(IN_BUF, safeLen);
     }
 
 
@@ -216,42 +243,49 @@ public final class RafaeliaCore {
     }
 
     public static int readOscillatorState(ByteBuffer outState, int oscCount) {
-        if (!_libLoaded) return -1;
+        if (!_libLoaded || outState == null || !outState.isDirect() || oscCount <= 0) return -1;
         return readOscillatorStateNative(outState, oscCount);
     }
 
     public static int debugSingleStep(ByteBuffer debugOut, int cap) {
-        if (!_libLoaded) return -1;
-        int phi = debugStepNative(STATE_BUF, _cycle, debugOut, cap);
-        _cycle = (_cycle + 1) % 42;
-        return phi;
+        if (!_libLoaded || debugOut == null || !debugOut.isDirect() || cap <= 0) return -1;
+        int safeCap = cap > debugOut.capacity() ? debugOut.capacity() : cap;
+        synchronized (JNI_LOCK) {
+            int phi = debugStepNative(STATE_BUF, _cycle, debugOut, safeCap);
+            if (phi >= 0) _cycle = (_cycle + 1) % CYCLE_PERIOD;
+            return phi;
+        }
     }
 
     public static boolean isNativeAvailable() { return _libLoaded; }
     public static int     getNativeArenaUsed() { return _libLoaded ? arenaSizeNative() : 0; }
-    public static int     getCurrentCycle()    { return _cycle; }
+    public static int     getCurrentCycle()    { synchronized (JNI_LOCK) { return _cycle; } }
     public static int initVcpuScheduler(int targetHz) { return _libLoaded ? initVcpuSchedulerNative(targetHz) : -1; }
     public static int stepVcpu(int id) { return _libLoaded ? stepVcpuNative(id) : -1; }
     public static int stepAllVcpus() { return _libLoaded ? stepAllVcpusNative() : -1; }
     public static String getVcpuTelemetry() {
         if (!_libLoaded) return "{}";
-        OUT_BUF.clear();
-        int n = getVcpuTelemetryNative(OUT_BUF, OUT_CAP);
-        if (n <= 0) return "{}";
-        byte[] tmp = new byte[n];
-        OUT_BUF.position(0);
-        OUT_BUF.get(tmp, 0, n);
-        return new String(tmp);
+        synchronized (JNI_LOCK) {
+            OUT_BUF.clear();
+            int n = safeOutputLength(getVcpuTelemetryNative(OUT_BUF, OUT_CAP));
+            if (n <= 0) return "{}";
+            byte[] tmp = new byte[n];
+            OUT_BUF.position(0);
+            OUT_BUF.get(tmp, 0, n);
+            return new String(tmp);
+        }
     }
     public static String getClockProfile() {
         if (!_libLoaded) return "{}";
-        OUT_BUF.clear();
-        int n = getClockProfileNative(OUT_BUF, OUT_CAP);
-        if (n <= 0) return "{}";
-        byte[] tmp = new byte[n];
-        OUT_BUF.position(0);
-        OUT_BUF.get(tmp, 0, n);
-        return new String(tmp);
+        synchronized (JNI_LOCK) {
+            OUT_BUF.clear();
+            int n = safeOutputLength(getClockProfileNative(OUT_BUF, OUT_CAP));
+            if (n <= 0) return "{}";
+            byte[] tmp = new byte[n];
+            OUT_BUF.position(0);
+            OUT_BUF.get(tmp, 0, n);
+            return new String(tmp);
+        }
     }
     public static int getTargetHz() { return gjsonInt(getClockProfile(), "\"target_hz\":"); }
     public static int getActualHz() { return gjsonInt(getClockProfile(), "\"actual_hz_q16\":"); }

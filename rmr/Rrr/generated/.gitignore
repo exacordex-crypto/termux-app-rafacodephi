@@ -1,0 +1,9 @@
+# Runtime/generated outputs (CI/local execution only)
+*.png
+*.pdf
+*.txt
+*.tar.gz
+
+# Python caches
+__pycache__/
+*.pyc

@@ -14,7 +14,7 @@ fi
 
 ./scripts/ci_android_preflight.sh >&2
 
-BOOTSTRAP_SOURCE="${RAF_BOOTSTRAP_SOURCE:-local}"
+BOOTSTRAP_SOURCE="${RAF_BOOTSTRAP_SOURCE:-upstream}"
 case "$BOOTSTRAP_SOURCE" in
   local)
     ./scripts/build_rafaelia_bootstraps.sh >&2

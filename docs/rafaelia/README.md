@@ -33,6 +33,15 @@
 - Análise e Validação (81-100)
 - Metadados e Referências (101-110)
 
+### 3. [Arquivo de Conhecimento Vectras-VM-Android](../knowledge_archives/vectras-vm-android/README.md)
+**Navegação auditável** para sementes E20/E13/S11 e material Vectras-VM-Android:
+- catálogo JSON validável por script
+- matriz de expansão por blocos
+- gates de claim, evidência, rollback e failover
+- runbook enterprise com mais de 20 boas práticas
+- malha determinística de 30000 slots de inserção/trabalho/evidência
+- separação entre metáfora didática, hipótese e prova executável
+
 ---
 
 ## 🎯 Navegação por Perfil

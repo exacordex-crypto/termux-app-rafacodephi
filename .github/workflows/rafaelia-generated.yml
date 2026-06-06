@@ -25,10 +25,12 @@ jobs:
           pip install numpy matplotlib
       - name: Run QPU simulator
         run: |
+          mkdir -p ci_artifacts/generated
           python rmr/Rrr/generated/rafaelia_qpu_simulator.py
+          cp rmr/Rrr/generated/rafaelia_metrics.png ci_artifacts/generated/
       - name: Run auto calibration
         run: |
-          python rmr/Rrr/generated/rafaelia_auto_calibration.py > rmr/Rrr/generated/calibration_result.txt
+          python rmr/Rrr/generated/rafaelia_auto_calibration.py > ci_artifacts/generated/calibration_result.txt
       - name: Archive generated binaries/artifacts
         run: |
           tar -czf rafaelia_generated_artifacts.tar.gz \

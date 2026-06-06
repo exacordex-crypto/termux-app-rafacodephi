@@ -23,6 +23,8 @@ info "Provisioning Android SDK/NDK/CMake"
 mkdir -p "${UNSIGNED_DIR}" "${SIGNED_DIR}" "$(dirname "${KEYSTORE_PATH}")"
 
 info "Preparing bootstrap environment and BLAKE3 vars"
+export RAF_BOOTSTRAP_SOURCE="${RAF_BOOTSTRAP_SOURCE:-upstream}"
+info "Using RAF_BOOTSTRAP_SOURCE=${RAF_BOOTSTRAP_SOURCE}"
 eval "$(./scripts/prepare_bootstrap_env.sh --print-env)"
 
 for v in AARCH64 ARM I686 X86_64; do

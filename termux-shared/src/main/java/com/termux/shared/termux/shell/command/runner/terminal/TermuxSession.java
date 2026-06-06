@@ -89,6 +89,8 @@ public class TermuxSession {
             executionCommand.workingDirectory = "/";
 
         String defaultBinPath = shellEnvironmentClient.getDefaultBinPath();
+        Logger.logInfo(LOG_TAG, "defaultBinPath=" + defaultBinPath);
+        Logger.logInfo(LOG_TAG, "workingDirectory=" + executionCommand.workingDirectory);
         if (defaultBinPath.isEmpty())
             defaultBinPath = "/system/bin";
 
@@ -97,30 +99,30 @@ public class TermuxSession {
             if (!executionCommand.isFailsafe) {
                 Error bootstrapError = TermuxQualityManager.checkBootstrapComplete();
                 if (bootstrapError != null) {
-                    Logger.logError(LOG_TAG, "Bootstrap validation failed: " + bootstrapError.getMessage());
-                    executionCommand.setStateFailed(bootstrapError);
-                    TermuxSession.processTermuxSessionResult(null, executionCommand);
-                    return null;
+                    // Keep terminal bootstrap resilient: missing/corrupted prefix payloads can be
+                    // recovered from an emergency shell, while failing hard here prevents any
+                    // repair workflow from running in-app.
+                    Logger.logWarn(LOG_TAG, "Bootstrap validation failed, continuing with shell fallback: " + bootstrapError.getMessage());
                 }
 
-                Error dependencyError = TermuxQualityManager.checkDependencies(currentPackageContext,
-                    Collections.singletonList("bash"));
-                if (dependencyError != null) {
-                    Logger.logError(LOG_TAG, "Shell dependency validation failed: " + dependencyError.getMessage());
-                    executionCommand.setStateFailed(dependencyError);
-                    TermuxSession.processTermuxSessionResult(null, executionCommand);
-                    return null;
-                }
+                // Do not hard-gate terminal startup on bash. The bootstrap contract only
+                // requires $PREFIX/bin/sh, and developer/CI bootstrap payloads may ship
+                // sh first while full package installation can add bash later. The login
+                // shell selection below still prefers bash when it exists and falls back
+                // through zsh, fish and sh.
             }
 
             if (!executionCommand.isFailsafe) {
+                StringBuilder foundCandidates = new StringBuilder();
                 for (String shellBinary : UnixShellEnvironment.LOGIN_SHELL_BINARIES) {
                     File shellFile = new File(defaultBinPath, shellBinary);
                     if (shellFile.canExecute()) {
-                        executionCommand.executable = shellFile.getAbsolutePath();
-                        break;
+                        if (foundCandidates.length() > 0) foundCandidates.append(",");
+                        foundCandidates.append(shellBinary);
+                        if (executionCommand.executable == null) executionCommand.executable = shellFile.getAbsolutePath();
                     }
                 }
+                Logger.logInfo(LOG_TAG, "shellCandidatesFound=" + (foundCandidates.length() == 0 ? "none" : foundCandidates.toString()));
             }
 
             if (executionCommand.executable == null) {
@@ -132,9 +134,11 @@ public class TermuxSession {
                 // https://cs.android.com/android/platform/superproject/+/android-11.0.0_r3:external/mksh/src/main.c;l=663
                 // https://cs.android.com/android/platform/superproject/+/android-11.0.0_r3:external/mksh/src/main.c;l=41
                 // https://cs.android.com/android/platform/superproject/+/android-11.0.0_r3:external/mksh/Android.bp;l=114
+                Logger.logWarn(LOG_TAG, "fallback /system/bin/sh selected");
                 executionCommand.executable = "/system/bin/sh";
             } else {
                 isLoginShell = true;
+                Logger.logInfo(LOG_TAG, "selected shell=" + executionCommand.executable);
             }
 
         }
@@ -143,7 +147,9 @@ public class TermuxSession {
         String[] commandArgs = shellEnvironmentClient.setupShellCommandArguments(executionCommand.executable, executionCommand.arguments);
 
         executionCommand.executable = commandArgs[0];
+        Logger.logInfo(LOG_TAG, "final executable=" + executionCommand.executable);
         String processName = (isLoginShell ? "-" : "") + ShellUtils.getExecutableBasename(executionCommand.executable);
+        Logger.logInfo(LOG_TAG, "processName=" + processName);
 
         String[] arguments = new String[commandArgs.length];
         arguments[0] = processName;

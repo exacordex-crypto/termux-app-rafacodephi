@@ -1,0 +1,157 @@
+{
+  "archive_id": "Vectras-VM-Android",
+  "schema_version": 2,
+  "generated_for": "knowledge archive organization",
+  "invariants": {
+    "nomalloc": true,
+    "freestanding": true,
+    "deterministic": true,
+    "q16_16": true,
+    "branchless_preferred": true,
+    "audit_trail_required": true,
+    "attractor_count": 42,
+    "bitomega_period": 42,
+    "lyapunov_phi": "phi=(1-H)*C",
+    "minimum_insertion_slots": 30000,
+    "failover_required": true,
+    "rollback_required": true,
+    "failsafe_required": true
+  },
+  "constants": {
+    "PHI32": "0x9E3779B9",
+    "PHI64": "0x9E3779B97F4A7C15",
+    "FNV1A_PRIME": "0x100000001B3",
+    "CRC32C_POLY": "0x82F63B78",
+    "SPIRAL_Q16": 56756,
+    "PHI_Q16": 106039,
+    "PI_Q16": 205887,
+    "ALPHA_Q16": 16384,
+    "PI_MAX_Q16": 58982
+  },
+  "records": [
+    {
+      "id": "E20",
+      "title": "SISTEMA_OPERACIONAL_COGNITIVO_COMPLETO",
+      "domain": "enterprise_os",
+      "status": "DOC_ONLY",
+      "truth_level": "conceptual_contract",
+      "raw_lines": [
+        "kernel=RmR_UnifiedKernel | scheduler=BitOmega_VcpuScheduler",
+        "filesystem=ISOraf_toroidal | rede=protocolo_por_estado",
+        "IA=GeoLM_TorusFlow | seguranca=Bitraf+CRC32C+Merkle",
+        "identidade=ISOraf_Identity | auditoria=Digital_Custody_Chain",
+        "boot=RF_ID->IDENTIFY->SELECT_KERNEL->freestanding",
+        "invariante_total=I=Phi(s,S,H,C,G) | tudo_converge_aqui",
+        "expansao=sistema_operacional_consciente_infraestrutura_soberana_completa"
+      ],
+      "expanded_blocks": [
+        "boot_contract",
+        "state_protocol_network",
+        "audit_chain",
+        "rollback_failover_watchdog"
+      ],
+      "falsification_condition": "Falha se for promovido para CODE_BACKED sem caminho de boot executavel, teste reproduzivel e log de rollback/failover."
+    },
+    {
+      "id": "E13",
+      "title": "PLATAFORMA_DE_DADOS_FEDERADOS",
+      "domain": "federated_data",
+      "status": "NEEDS_EVIDENCE",
+      "truth_level": "architecture_seed",
+      "raw_lines": [
+        "no=RmR_UnifiedKernel_local | dado=nunca_sai_do_no",
+        "consulta=route_tag como indice_distribuido | resultado=agregado_por_coerencia",
+        "privacidade=ISOraf_identity sem revelar conteudo",
+        "expansao=saude_federada_dados_bancarios_pesquisa_colaborativa_privada"
+      ],
+      "expanded_blocks": [
+        "local_node_contract",
+        "route_tag_index",
+        "privacy_boundary",
+        "coherence_aggregation"
+      ],
+      "falsification_condition": "Falha se qualquer prova de conceito exigir extracao do dado bruto do no local para responder consulta agregada."
+    },
+    {
+      "id": "S11",
+      "title": "LLM_SEM_PESOS_GEOLM",
+      "domain": "geolm_runtime",
+      "status": "DOC_ONLY",
+      "truth_level": "experimental_seed",
+      "raw_lines": [
+        "base=TorusFlow+RafCognitiveCycle | tokens->transicoes_de_estado",
+        "memoria=atratores_estaveis | esquecimento=decaimento_Rafaelia",
+        "ciclo=[psi,chi,rho,Delta,Sigma,Omega] | Sigma=memoria_coerente | Omega=completude",
+        "expansao=modelo_de_linguagem_em_4GB_RAM_ARM_Cortex-A7_sem_GPU"
+      ],
+      "expanded_blocks": [
+        "token_state_transition",
+        "attractor_memory",
+        "decay_forgetting",
+        "arm32_no_gpu_limits"
+      ],
+      "falsification_condition": "Falha como claim de LLM se nao houver corpus, metrica de qualidade, limite de memoria medido e comparacao reprodutivel."
+    }
+  ],
+  "navigation": [
+    {
+      "level": 0,
+      "name": "Home",
+      "path": "docs/knowledge_archives/vectras-vm-android/README.md",
+      "purpose": "entrada humana do arquivo"
+    },
+    {
+      "level": 1,
+      "name": "Catalog",
+      "path": "docs/knowledge_archives/vectras-vm-android/catalog.json",
+      "purpose": "fonte machine-readable"
+    },
+    {
+      "level": 2,
+      "name": "Expansion",
+      "path": "docs/knowledge_archives/vectras-vm-android/EXPANSION_MATRIX.md",
+      "purpose": "expansao operacional por blocos"
+    },
+    {
+      "level": 3,
+      "name": "Claim Gates",
+      "path": "docs/knowledge_archives/vectras-vm-android/CLAIM_GATES.md",
+      "purpose": "status, prova, rollback e falsificacao"
+    },
+    {
+      "level": 4,
+      "name": "Enterprise Runbook",
+      "path": "docs/knowledge_archives/vectras-vm-android/ENTERPRISE_EXCELLENCE_RUNBOOK.md",
+      "purpose": "boas praticas, failsafe, failover, rollback e invariante 30000"
+    },
+    {
+      "level": 5,
+      "name": "Fullstack Capability Matrix",
+      "path": "docs/knowledge_archives/vectras-vm-android/FULLSTACK_ENTERPRISE_CAPABILITY_MATRIX.md",
+      "purpose": "capacidade enterprise por camada e teste"
+    },
+    {
+      "level": 6,
+      "name": "30000 Insertion Lattice",
+      "path": "docs/knowledge_archives/vectras-vm-android/INSERTION_LATTICE_30000.csv",
+      "purpose": "30000 slots determinísticos de trabalho/evidencia/mitigacao"
+    }
+  ],
+  "insertion_lattice": {
+    "path": "docs/knowledge_archives/vectras-vm-android/INSERTION_LATTICE_30000.csv",
+    "minimum_slots": 30000,
+    "semantics": "Each row is a deterministic work/evidence/mitigation slot; a row is not a claim of implemented production code until promoted through claim gates.",
+    "columns": [
+      "slot_id",
+      "record_id",
+      "layer",
+      "practice",
+      "axis",
+      "pipeline",
+      "flag",
+      "fail_mode",
+      "rollback"
+    ],
+    "falsification_condition": "Falha se a malha tiver menos de 30000 slots, IDs duplicados, coluna obrigatoria ausente ou slot promovido sem evidencia."
+  }
+}
