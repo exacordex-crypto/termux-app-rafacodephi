@@ -9,4 +9,4 @@ import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxBootstrap;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.crash.TermuxCrashUtils;
-import com.termux.shared.termux.file.Term
+import com.termux.shared.termux.file.TermuxFile
