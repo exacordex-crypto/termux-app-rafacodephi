@@ -18,6 +18,7 @@ Este documento registra o entendimento operacional que deve acompanhar mudanças
 10. `docs/android-target-migration.md` — política de SDK/target, permissões e riscos Android moderno.
 11. `docs/RAFAELIA_SESSION_TRUTH_NAVIGATION.md` — navegação da sessão ampla: token vazio, fato versus hipótese, parábolas didáticas, 7 direções e ciclos de mitigação.
 12. `docs/RAFAELIA_METAPHOR_OPERATIONAL_AUDIT_2026-06-06.md` — auditoria que converte metáforas/parábolas, símbolos e check-up técnico em gates operacionais, riscos, failover e rollback.
+13. `docs/RAFAELIA_TWO_CYCLE_ENTERPRISE_PROTOCOL.md` — protocolo de dois ciclos para intake Omega, retroalimentação, promoção, fail-safe, failover, rollback e mitigação enterprise.
 
 ## O que deve ser carregado como conhecimento
 
@@ -31,6 +32,7 @@ Este documento registra o entendimento operacional que deve acompanhar mudanças
 - **Geometria e distância:** matrizes, toros, espirais, coprimalidade e diferenças `dθ != dγ` entram como regras de mapeamento, não como aleatoriedade.
 - **Linguagem como camada:** alfabetos, direção de leitura, acento, cadência e tradução são tratados como metadados semânticos; não devem quebrar o protocolo técnico.
 - **Fronteira de evidência:** quando um conceito é simbólico, marcar como `DOC_ONLY`; quando precisa medição, marcar como `NEEDS_BENCHMARK`; quando há código, validar por teste.
+- **Dois ciclos:** primeiro classificar fatos, hipóteses, metáforas, VOID e riscos; depois promover apenas itens com artefato, teste, fail-safe, failover, rollback e mitigação.
 
 ## Mapa dos 50 conceitos do prompt para decisões técnicas
 
