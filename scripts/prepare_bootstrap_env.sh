@@ -12,9 +12,12 @@ elif [[ $# -gt 0 ]]; then
   exit 1
 fi
 
+log() { printf '[prepare_bootstrap_env] %s\n' "$*" >&2; }
+
 ./scripts/ci_android_preflight.sh >&2
 
-BOOTSTRAP_SOURCE="${RAF_BOOTSTRAP_SOURCE:-upstream}"
+BOOTSTRAP_SOURCE="${RAF_BOOTSTRAP_SOURCE:-local}"
+log "Bootstrap source: $BOOTSTRAP_SOURCE"
 case "$BOOTSTRAP_SOURCE" in
   local)
     ./scripts/build_rafaelia_bootstraps.sh >&2
@@ -28,13 +31,19 @@ case "$BOOTSTRAP_SOURCE" in
     ;;
 esac
 
-./scripts/verify_bootstrap_contract.sh --check >&2
+log "Verifying bootstrap contract..."
+if ! ./scripts/verify_bootstrap_contract.sh --check >&2; then
+  log "ERROR: Bootstrap contract verification failed"
+  exit 1
+fi
+log "Bootstrap contract OK"
 
 if ! python3 -c 'import blake3' >/dev/null 2>&1; then
+  log "Installing blake3..."
   python3 -m pip install --user blake3 >&2
 fi
 
-readarray -t HASH_LINES < <(python3 - <<'PY'
+if HASH_OUTPUT="$(python3 - <<'PY'
 from pathlib import Path
 from blake3 import blake3
 import hashlib
@@ -66,10 +75,16 @@ for env_key, file_name in mapping.items():
         raise SystemExit(f"Invalid {algo} for {path}: {digest}")
     print(f"{env_key}={digest}")
 PY
-)
+)"; then
+  readarray -t HASH_LINES <<<"$HASH_OUTPUT"
+else
+  HASH_STATUS=$?
+  log "ERROR: Bootstrap hash generation failed (python exit ${HASH_STATUS})"
+  exit "$HASH_STATUS"
+fi
 
 if [[ ${#HASH_LINES[@]} -ne 8 ]]; then
-  echo "Expected 8 bootstrap hash lines (BLAKE3+SHA256), got ${#HASH_LINES[@]}" >&2
+  log "ERROR: Expected 8 bootstrap hash lines (BLAKE3+SHA256), got ${#HASH_LINES[@]}"
   exit 1
 fi
 
@@ -77,6 +92,7 @@ if [[ "$MODE" == "--github-env" ]]; then
   : "${GITHUB_ENV:?GITHUB_ENV must be set for --github-env mode}"
   for line in "${HASH_LINES[@]}"; do
     echo "$line" >> "$GITHUB_ENV"
+    log "Added to GITHUB_ENV: ${line%%=*}"
   done
 else
   for line in "${HASH_LINES[@]}"; do
@@ -84,7 +100,4 @@ else
   done
 fi
 
-
-if [[ "$MODE" == "--print-env" ]]; then
-  echo "# bootstrap-hashes: BLAKE3 + SHA256 generated for aarch64/arm/i686/x86_64" >&2
-fi
+log "Bootstrap environment OK (${#HASH_LINES[@]} hashes)"

@@ -53,9 +53,10 @@ from pathlib import Path
 from zipfile import ZipFile
 
 base = Path('app/src/main/cpp')
-expected_package = 'com.termux.rafacodephi'
-expected_page = '16384'
-validation_mode = __import__('os').environ.get('TERMUX_BOOTSTRAP_VALIDATION_MODE', '').strip()
+import os
+expected_package = os.environ.get('TERMUX_PACKAGE_NAME', 'com.termux.rafacodephi')
+expected_page = os.environ.get('TERMUX_PAGE_SIZE', '16384')
+validation_mode = os.environ.get('TERMUX_BOOTSTRAP_VALIDATION_MODE', '').strip()
 archives = {
     'bootstrap-aarch64.zip': ('aarch64', '21'),
     'bootstrap-arm.zip': ('arm', '28'),
