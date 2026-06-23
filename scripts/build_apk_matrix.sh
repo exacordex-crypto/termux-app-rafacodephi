@@ -26,12 +26,15 @@ info "Preparing bootstrap environment and BLAKE3 vars"
 export RAF_BOOTSTRAP_SOURCE="${RAF_BOOTSTRAP_SOURCE:-local}"
 info "Using RAF_BOOTSTRAP_SOURCE=${RAF_BOOTSTRAP_SOURCE}"
 bootstrap_env_output="$(./scripts/prepare_bootstrap_env.sh --print-env)" || fail "Bootstrap environment setup failed"
-eval "${bootstrap_env_output}"
+eval "${bootstrap_env_output}" || fail "Failed to evaluate bootstrap environment"
 
+info "Validating BLAKE3 environment variables"
 for v in AARCH64 ARM I686 X86_64; do
   var="TERMUX_BOOTSTRAP_BLAKE3_${v}"
   val="${!var:-}"
-  [[ "$val" =~ ^[0-9a-f]{64}$ ]] || fail "${var} missing/invalid before final build"
+  [[ -n "$val" ]] || fail "${var} is not set"
+  [[ "$val" =~ ^[0-9a-f]{64}$ ]] || fail "${var}=${val} is not a valid 64-char hex string"
+  info "${var}=${val:0:16}..."
 done
 
 info "Running debug unit tests"
