@@ -1,3 +1,5 @@
+# ci_track: deprecated
+# ci_abis: arm64-v8a,armeabi-v7a
 name: 🔧 Build ARM32 Multi-Page Fix (Unified Workflow)
 
 on:
@@ -30,7 +32,7 @@ on:
           - 'true'
 
 concurrency:
-  group: build-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -112,7 +114,7 @@ jobs:
           
           # ⚙️ Page Size Configuration - ${{ matrix.arch }}
           ifeq ($(TARGET_ARCH_ABI),${{ matrix.abi }})
-            LOCAL_LDFLAGS := -Wl,--gc-sections \
+            LOCAL_LDFLAGS += -Wl,--gc-sections \
                              -Wl,-z,max-page-size=${{ matrix.page_size }} \
                              -Wl,-z,common-page-size=${{ matrix.page_size }}
           endif
@@ -188,7 +190,7 @@ jobs:
             build-*.log
 
   validate-consolidated:
-    name: ✅ Stage 3: Validate & Consolidate
+    name: "✅ Stage 3: Validate & Consolidate"
     needs: build
     runs-on: ubuntu-latest
     if: always()
