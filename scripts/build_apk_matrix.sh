@@ -23,9 +23,10 @@ info "Provisioning Android SDK/NDK/CMake"
 mkdir -p "${UNSIGNED_DIR}" "${SIGNED_DIR}" "$(dirname "${KEYSTORE_PATH}")"
 
 info "Preparing bootstrap environment and BLAKE3 vars"
-export RAF_BOOTSTRAP_SOURCE="${RAF_BOOTSTRAP_SOURCE:-upstream}"
+export RAF_BOOTSTRAP_SOURCE="${RAF_BOOTSTRAP_SOURCE:-local}"
 info "Using RAF_BOOTSTRAP_SOURCE=${RAF_BOOTSTRAP_SOURCE}"
-eval "$(./scripts/prepare_bootstrap_env.sh --print-env)"
+bootstrap_env_output="$(./scripts/prepare_bootstrap_env.sh --print-env)" || fail "Bootstrap environment setup failed"
+eval "${bootstrap_env_output}"
 
 for v in AARCH64 ARM I686 X86_64; do
   var="TERMUX_BOOTSTRAP_BLAKE3_${v}"
