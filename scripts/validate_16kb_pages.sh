@@ -23,6 +23,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --apk)
             APK_FILE="${2:-}"
+            if [[ -z "$APK_FILE" || "$APK_FILE" == --* ]]; then
+                echo -e "${COLOR_RED}✗ --apk requires a file path${COLOR_RESET}" >&2
+                exit 1
+            fi
             shift 2
             ;;
         --require-readelf)
@@ -31,6 +35,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --abis)
             TARGET_ARCHS="${2:-}"
+            if [[ -z "$TARGET_ARCHS" || "$TARGET_ARCHS" == --* ]]; then
+                echo -e "${COLOR_RED}✗ --abis requires a comma-separated ABI list${COLOR_RESET}" >&2
+                exit 1
+            fi
             shift 2
             ;;
         *)
@@ -92,13 +100,55 @@ echo -e "${COLOR_BLUE}=== Native Libraries ===${COLOR_RESET}"
 LIBS_FOUND=0
 LIBS_CHECKED=0
 LIBS_VALID=0
-ARM64_VALID=0
-ARM64_TOTAL=0
-X86_64_VALID=0
-X86_64_TOTAL=0
-
-IFS=',' read -ra CRITICAL_ARCHS <<< "$TARGET_ARCHS"
+declare -A ARCH_TOTAL=()
+declare -A ARCH_VALID=()
+declare -A CRITICAL_ARCH_SET=()
 ALL_ARCHS=("arm64-v8a" "x86_64" "armeabi-v7a" "x86")
+
+for arch in "${ALL_ARCHS[@]}"; do
+    ARCH_TOTAL["$arch"]=0
+    ARCH_VALID["$arch"]=0
+done
+
+IFS=',' read -ra RAW_CRITICAL_ARCHS <<< "$TARGET_ARCHS"
+CRITICAL_ARCHS=()
+for raw_arch in "${RAW_CRITICAL_ARCHS[@]}"; do
+    arch="$(printf '%s' "$raw_arch" | xargs)"
+    [[ -n "$arch" ]] || continue
+    case "$arch" in
+        arm64-v8a|x86_64)
+            CRITICAL_ARCHS+=("$arch")
+            CRITICAL_ARCH_SET["$arch"]=1
+            ;;
+        *)
+            echo -e "${COLOR_RED}✗ Unsupported critical ABI:${COLOR_RESET} $arch" >&2
+            echo "Only 64-bit Android 15/16 critical ABIs are supported here: arm64-v8a,x86_64" >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [ "${#CRITICAL_ARCHS[@]}" -eq 0 ]; then
+    echo -e "${COLOR_RED}✗ No critical ABI selected${COLOR_RESET}" >&2
+    exit 1
+fi
+
+is_critical_arch() {
+    [[ -n "${CRITICAL_ARCH_SET[$1]:-}" ]]
+}
+
+alignment_is_16kb_compatible() {
+    local alignment="$1"
+    local value
+    if [[ "$alignment" =~ ^0x[0-9a-fA-F]+$ ]]; then
+        value=$((alignment))
+    elif [[ "$alignment" =~ ^[0-9]+$ ]]; then
+        value="$alignment"
+    else
+        return 1
+    fi
+    [[ "$value" -ge 16384 ]]
+}
 
 for arch in "${ALL_ARCHS[@]}"; do
     LIB_DIR="$TEMP_DIR/lib/$arch"
@@ -118,22 +168,15 @@ for arch in "${ALL_ARCHS[@]}"; do
                     # The alignment is the last field on the second line after "LOAD"
                     ALIGNMENT=$(readelf -l "$lib" 2>/dev/null | awk '/LOAD/{getline; print $NF; exit}')
                     
-                    # Track by architecture
-                    if [ "$arch" = "arm64-v8a" ]; then
-                        ARM64_TOTAL=$((ARM64_TOTAL + 1))
-                    elif [ "$arch" = "x86_64" ]; then
-                        X86_64_TOTAL=$((X86_64_TOTAL + 1))
+                    if is_critical_arch "$arch"; then
+                        ARCH_TOTAL["$arch"]=$((ARCH_TOTAL["$arch"] + 1))
                     fi
                     
-                    # Accept 16KB (0x4000) or larger alignment (like 64KB = 0x10000)
-                    # Larger alignments are compatible with 16KB requirement
-                    if [ "$ALIGNMENT" = "0x4000" ] || [ "$ALIGNMENT" = "0x10000" ]; then
+                    if alignment_is_16kb_compatible "$ALIGNMENT"; then
                         echo -e "  ${COLOR_GREEN}✓${COLOR_RESET} $LIBNAME - Alignment: $ALIGNMENT (≥16KB) ✓"
                         LIBS_VALID=$((LIBS_VALID + 1))
-                        if [ "$arch" = "arm64-v8a" ]; then
-                            ARM64_VALID=$((ARM64_VALID + 1))
-                        elif [ "$arch" = "x86_64" ]; then
-                            X86_64_VALID=$((X86_64_VALID + 1))
+                        if is_critical_arch "$arch"; then
+                            ARCH_VALID["$arch"]=$((ARCH_VALID["$arch"] + 1))
                         fi
                     else
                         # 32-bit architectures use different alignment
@@ -161,20 +204,23 @@ if command -v readelf &> /dev/null; then
     echo -e "Libraries with 16KB alignment: $LIBS_VALID"
     echo ""
     echo -e "${COLOR_BLUE}=== Critical Architectures (Android 15/16 with 16KB pages) ===${COLOR_RESET}"
-    echo -e "arm64-v8a: $ARM64_VALID/$ARM64_TOTAL libraries with correct alignment"
-    echo -e "x86_64:    $X86_64_VALID/$X86_64_TOTAL libraries with correct alignment"
+    for arch in "${CRITICAL_ARCHS[@]}"; do
+        printf '%s: %s/%s libraries with correct alignment\n' "$arch" "${ARCH_VALID[$arch]}" "${ARCH_TOTAL[$arch]}"
+    done
     echo ""
     
-    # Check if critical architectures pass
     CRITICAL_PASS=true
-    if [[ " ${CRITICAL_ARCHS[*]} " == *" arm64-v8a "* ]] && [ "$ARM64_TOTAL" -gt 0 ] && [ "$ARM64_VALID" -ne "$ARM64_TOTAL" ]; then
-        CRITICAL_PASS=false
-    fi
-    if [[ " ${CRITICAL_ARCHS[*]} " == *" x86_64 "* ]] && [ "$X86_64_TOTAL" -gt 0 ] && [ "$X86_64_VALID" -ne "$X86_64_TOTAL" ]; then
-        CRITICAL_PASS=false
-    fi
-    
-    if [ "$CRITICAL_PASS" = true ] && [ "$ARM64_VALID" -gt 0 ]; then
+    CRITICAL_TOTAL=0
+    CRITICAL_VALID=0
+    for arch in "${CRITICAL_ARCHS[@]}"; do
+        CRITICAL_TOTAL=$((CRITICAL_TOTAL + ARCH_TOTAL["$arch"]))
+        CRITICAL_VALID=$((CRITICAL_VALID + ARCH_VALID["$arch"]))
+        if [ "${ARCH_TOTAL[$arch]}" -eq 0 ] || [ "${ARCH_VALID[$arch]}" -ne "${ARCH_TOTAL[$arch]}" ]; then
+            CRITICAL_PASS=false
+        fi
+    done
+
+    if [ "$CRITICAL_PASS" = true ] && [ "$CRITICAL_TOTAL" -gt 0 ] && [ "$CRITICAL_VALID" -eq "$CRITICAL_TOTAL" ]; then
         echo -e "${COLOR_GREEN}✓✓✓ CRITICAL CHECKS PASSED! ✓✓✓${COLOR_RESET}"
         echo -e "APK is correctly built for Android 15/16 with 16KB page size support"
         echo ""
