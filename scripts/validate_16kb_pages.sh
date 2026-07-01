@@ -174,7 +174,18 @@ if command -v readelf &> /dev/null; then
         CRITICAL_PASS=false
     fi
     
-    if [ "$CRITICAL_PASS" = true ] && [ "$ARM64_VALID" -gt 0 ]; then
+    CRITICAL_TOTAL=0
+    CRITICAL_VALID=0
+    if [[ " ${CRITICAL_ARCHS[*]} " == *" arm64-v8a "* ]]; then
+        CRITICAL_TOTAL=$((CRITICAL_TOTAL + ARM64_TOTAL))
+        CRITICAL_VALID=$((CRITICAL_VALID + ARM64_VALID))
+    fi
+    if [[ " ${CRITICAL_ARCHS[*]} " == *" x86_64 "* ]]; then
+        CRITICAL_TOTAL=$((CRITICAL_TOTAL + X86_64_TOTAL))
+        CRITICAL_VALID=$((CRITICAL_VALID + X86_64_VALID))
+    fi
+
+    if [ "$CRITICAL_PASS" = true ] && [ "$CRITICAL_TOTAL" -gt 0 ] && [ "$CRITICAL_VALID" -eq "$CRITICAL_TOTAL" ]; then
         echo -e "${COLOR_GREEN}✓✓✓ CRITICAL CHECKS PASSED! ✓✓✓${COLOR_RESET}"
         echo -e "APK is correctly built for Android 15/16 with 16KB page size support"
         echo ""
