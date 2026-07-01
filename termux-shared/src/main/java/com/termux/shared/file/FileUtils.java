@@ -6,7 +6,6 @@ import android.system.Os;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.google.common.io.RecursiveDeleteOption;
 import com.termux.shared.file.filesystem.FileType;
 import com.termux.shared.file.filesystem.FileTypes;
 import com.termux.shared.data.DataUtils;
@@ -32,8 +31,13 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Serializable;
 import java.nio.charset.Charset;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
@@ -50,6 +54,33 @@ public class FileUtils {
     public static final String APP_WORKING_DIRECTORY_PERMISSIONS = "rwx"; // Default: "rwx"
 
     private static final String LOG_TAG = "FileUtils";
+
+    private static void deleteTreeWithNio(final Path path, final boolean keepRoot) throws IOException {
+        if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return;
+
+        Files.walkFileTree(path, new SimpleFileVisitor<Path>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Files.deleteIfExists(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                if (exc != null) throw exc;
+                if (!keepRoot || !dir.equals(path)) Files.deleteIfExists(dir);
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
+    private static void deleteRecursivelyWithNio(final Path path) throws IOException {
+        deleteTreeWithNio(path, false);
+    }
+
+    private static void clearDirectoryWithNio(final Path path) throws IOException {
+        deleteTreeWithNio(path, true);
+    }
 
     /**
      * Get canonical path.
@@ -1318,26 +1349,7 @@ public class FileUtils {
             Logger.logVerbose(LOG_TAG, "Deleting " + label + "file at path \"" + filePath + "\"");
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                /*
-                 * Try to use {@link SecureDirectoryStream} if available for safer directory
-                 * deletion, it should be available for android >= 8.0
-                 * https://guava.dev/releases/24.1-jre/api/docs/com/google/common/io/MoreFiles.html#deleteRecursively-java.nio.file.Path-com.google.common.io.RecursiveDeleteOption...-
-                 * https://github.com/google/guava/issues/365
-                 * https://cs.android.com/android/platform/superproject/+/android-11.0.0_r3:libcore/ojluni/src/main/java/sun/nio/fs/UnixSecureDirectoryStream.java
-                 *
-                 * MoreUtils is marked with the @Beta annotation so the API may be removed in
-                 * future but has been there for a few years now.
-                 *
-                 * If an exception is thrown, the exception message might not contain the full errors.
-                 * Individual failures get added to suppressed throwables which can be extracted
-                 * from the exception object by calling `Throwable[] getSuppressed()`. So just logging
-                 * the exception message and stacktrace may not be enough, the suppressed throwables
-                 * need to be logged as well, which the Logger class does if they are found in the
-                 * exception added to the Error that's returned by this function.
-                 * https://github.com/google/guava/blob/v30.1.1/guava/src/com/google/common/io/MoreFiles.java#L775
-                 */
-                //noinspection UnstableApiUsage
-                com.google.common.io.MoreFiles.deleteRecursively(file.toPath(), RecursiveDeleteOption.ALLOW_INSECURE);
+                deleteRecursivelyWithNio(file.toPath());
             } else {
                 if (fileType == FileType.DIRECTORY) {
                     // deleteDirectory() instead of forceDelete() gets the files list first instead of walking directory tree, so seems safer
@@ -1408,10 +1420,7 @@ public class FileUtils {
             // If directory exists, clear its contents
             if (fileType == FileType.DIRECTORY) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    /* If an exception is thrown, the exception message might not contain the full errors.
-                     * Individual failures get added to suppressed throwables. */
-                    //noinspection UnstableApiUsage
-                    com.google.common.io.MoreFiles.deleteDirectoryContents(file.toPath(), RecursiveDeleteOption.ALLOW_INSECURE);
+                    clearDirectoryWithNio(file.toPath());
                 } else {
                     // Will give runtime exceptions on android < 8 due to missing classes like java.nio.file.Path if org.apache.commons.io version > 2.5
                     org.apache.commons.io.FileUtils.cleanDirectory(new File(filePath));
